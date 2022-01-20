@@ -6,10 +6,10 @@
 """
 
 from .. import chat_id, jdbot, logger, API_ID, API_HASH, PROXY_START, proxy, CONFIG_DIR, SCRIPTS_DIR, OWN_DIR, BOT_DIR, \
-    _DiyScripts, LOG_DIR, SHORTCUT_FILE, BOT_LOG_FILE, BOT_JSON_FILE, QR_IMG_FILE, BOT_SET_JSON_FILE_USER, \
+    DiyScripts, LOG_DIR, SHORTCUT_FILE, BOT_LOG_FILE, BOT_JSON_FILE, QR_IMG_FILE, BOT_SET_JSON_FILE_USER, \
     BOT_SET_JSON_FILE, ch_name, TOKEN, START_CMD, PROXY_TYPE, connectionType
 from ..bot.utils import row, CRON_FILE, BEAN_LOG_DIR, CONFIG_SH_FILE, V4, QL, DIY_DIR, TASK_CMD, get_cks, split_list, \
-    backup_file, press_event, cmd, get_ch_names, log_btn, snode_btn, mycron, mycron, add_cron_V4, add_cron, \
+    backup_file, press_event, execute, get_ch_names, log_btn, snode_btn, mycron, mycron, add_cron_V4, add_cron, \
     cron_manage_QL, cron_manage_V4, cron_manage, env_manage_QL
 from telethon import events, Button
 from asyncio import exceptions

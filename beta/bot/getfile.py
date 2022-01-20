@@ -1,7 +1,11 @@
-from telethon import events, Button
 import asyncio
-from .. import jdbot, chat_id, SCRIPTS_DIR, CONFIG_DIR, logger
-from .utils import press_event, backup_file, add_cron, cmd, DIY_DIR, TASK_CMD, V4, split_list, row
+import os
+import traceback
+
+from telethon import Button, events
+
+from .utils import add_cron, backup_file, DIY_DIR, execute, press_event, row, split_list, TASK_CMD, V4
+from .. import chat_id, CONFIG_DIR, jdbot, logger, SCRIPTS_DIR
 
 
 @jdbot.on(events.NewMessage(from_users=chat_id))
@@ -14,10 +18,10 @@ async def bot_get_file(event):
             return
         filename = event.message.file.name
         if not (
-            filename.endswith(".py")
-            or filename.endswith(".pyc")
-            or filename.endswith(".js")
-            or filename.endswith(".sh")
+                filename.endswith(".py")
+                or filename.endswith(".pyc")
+                or filename.endswith(".js")
+                or filename.endswith(".sh")
         ):
             return
         SENDER = event.sender_id
@@ -95,9 +99,14 @@ async def bot_get_file(event):
                     await jdbot.edit_message(msg, f'{filename}已保存到{res1}文件夹')
             conversation.cancel()
         if cmdtext:
-            await cmd(cmdtext)
+            await execute(chat_id, None, cmdtext)
     except asyncio.TimeoutError:
         await jdbot.edit_message(msg, '选择已超时，对话已停止')
     except Exception as e:
-        await jdbot.send_message(chat_id, f'something wrong,I\'m sorry\n{str(e)}')
-        logger.error(f'something wrong,I\'m sorry\n{str(e)}')
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")

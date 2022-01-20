@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import asyncio
 import os
 import re
-import sys
+import traceback
 from asyncio import exceptions
 
-from telethon import events, Button
+from telethon import Button, events
 
-from .. import chat_id, jdbot, logger, ch_name, BOT_SET
-from ..bot.utils import press_event, V4
-from ..diy.utils import read, write
+from .. import chat_id, jdbot, logger
+from ..bot.utils import press_event, rwcon, V4
 
 
 @jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'(export\s)?\w*=(".*"|\'.*\')'))
@@ -38,10 +36,10 @@ async def myaddexport(event):
                 else:
                     msg = await jdbot.edit_message(msg, f"好的，请稍等\n你设置变量为：{kname}=\"{vname}\"")
                 conv.cancel()
-            configs = read("str")
+            configs = rwcon("str")
             await asyncio.sleep(1.5)
             if f"export {kname}=" in configs:
-                configs = re.sub(f'{kname}=(\"|\').*(\"|\')', f'{kname}="{vname}"', configs)
+                configs = re.sub(f'{kname}=[\"\'].*[\"\']', f'{kname}="{vname}"', configs)
                 end = "替换环境变量成功"
             else:
                 async with jdbot.conversation(SENDER, timeout=60) as conv:
@@ -58,7 +56,7 @@ async def myaddexport(event):
                         note = f" # {note.raw_text}"
                     conv.cancel()
                 if V4:
-                    configs = read("list")
+                    configs = rwcon("list")
                     for config in configs:
                         if "第五区域" in config and "↑" in config:
                             end_line = configs.index(config)
@@ -66,21 +64,19 @@ async def myaddexport(event):
                     configs.insert(end_line - 1, f'export {kname}="{vname}"{note}\n')
                     configs = ''.join(configs)
                 else:
-                    configs = read("str")
+                    configs = rwcon("str")
                     configs += f'\nexport {kname}="{vname}"{note}'
                 await asyncio.sleep(1.5)
                 end = "新增环境变量成功"
-            write(configs)
+            rwcon(configs)
             await jdbot.edit_message(msg, end)
     except exceptions.TimeoutError:
         await jdbot.edit_message(msg, '选择已超时，对话已停止，感谢你的使用')
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-
-if ch_name:
-    jdbot.add_event_handler(myaddexport, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))

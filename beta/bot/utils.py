@@ -3,13 +3,15 @@ import datetime
 import json
 import os
 import re
+import sqlite3
 import time
+import traceback
 from functools import wraps
 
 import requests
-from telethon import events, Button
+from telethon import Button, events
 
-from .. import jdbot, chat_id, LOG_DIR, logger, JD_DIR, OWN_DIR, CONFIG_DIR, BOT_SET
+from .. import BOT_SET, chat_id, CONFIG_DIR, JD_DIR, jdbot, LOG_DIR, logger, OWN_DIR, QL_SQLITE_FILE
 
 row = int(BOT_SET["每页列数"])
 CRON_FILE = f"{CONFIG_DIR}/crontab.list"
@@ -34,6 +36,7 @@ elif os.environ.get("QL_DIR"):
             BEAN_LOG_DIR = f"{LOG_DIR}/{mydir}"
             break
 else:
+    AUTH_FILE = None
     DIY_DIR = None
     TASK_CMD = "node"
 
@@ -42,47 +45,27 @@ def Ver_Main(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         res = func(*args, **kwargs)
-        if str(res).find("valid sign") > -1:
-            msg = ql_login()
-            return {"code": 400, "data": msg}
         return res
+
     return wrapper
 
 
-def ql_login():
-    url = "http://127.0.0.1:5600/api/login"
-    with open(AUTH_FILE, "r", encoding="utf-8") as f:
-        auth = json.load(f)
-    data = {"username": auth["username"], "password": auth["password"]}
-    try:
-        res = requests.post(url, json=data).json()
-        if res["code"] == 200:
-            return "自动登录成功，请重新执行命令"
-        elif res["message"].find("两步验证") > -1:
-            return " 当前登录已过期，且已开启两步登录验证，请使用命令/auth 六位验证码完成登录"
-    except Exception as e:
-        return "自动登录出错：" + str(e)
-
-
-def get_cks(ckfile):
-    ck_reg = re.compile(r"pt_key=\S*?;.*?pt_pin=\S*?;")
-    cookie_file = r"/ql/db/cookie.db"
-    if QL and not os.path.exists(cookie_file):
-        with open(ckfile, "r", encoding="utf-8") as f:
-            auth = json.load(f)
-        lines = str(env_manage_QL("search", "JD_COOKIE", auth["token"]))
-    elif QL:
-        with open(f"{CONFIG_DIR}/cookie.sh", "r", encoding="utf-8") as f:
-            lines = f.read()
-    else:
-        with open(ckfile, "r", encoding="utf-8") as f:
-            lines = f.read()
-    cookies = ck_reg.findall(lines)
-    for ck in cookies:
-        if ck == "pt_key=xxxxxxxxxx;pt_pin=xxxx;":
-            cookies.remove(ck)
-            break
-    return cookies
+# 读写config.sh
+def rwcon(arg):
+    if arg == "str":
+        with open(f"{CONFIG_DIR}/config.sh", 'r', encoding='utf-8') as f1:
+            configs = f1.read()
+        return configs
+    elif arg == "list":
+        with open(f"{CONFIG_DIR}/config.sh", 'r', encoding='utf-8') as f1:
+            configs = f1.readlines()
+        return configs
+    elif isinstance(arg, str):
+        with open(f"{CONFIG_DIR}/config.sh", 'w', encoding='utf-8') as f1:
+            f1.write(arg)
+    elif isinstance(arg, list):
+        with open(f"{CONFIG_DIR}/config.sh", 'w', encoding='utf-8') as f1:
+            f1.write("".join(arg))
 
 
 def split_list(datas, n, row: bool = True):
@@ -113,34 +96,91 @@ def press_event(user_id):
     return events.CallbackQuery(func=lambda e: e.sender_id == user_id)
 
 
-async def cmd(cmdtext):
-    """定义执行cmd命令"""
+async def ql_token():
+    if os.path.exists(QL_SQLITE_FILE):
+        con = sqlite3.connect(QL_SQLITE_FILE)
+        cur = con.cursor()
+        cur.execute("select client_id,client_secret,tokens from Apps")
+        apps = cur.fetchone()
+        con.close()
+        app = {'client_id': apps[0], 'client_secret': apps[1], 'tokens': json.loads(apps[2]) if apps[2] else None}
+    else:
+        with open("/ql/db/app.db", "r", encoding="utf-8") as file:
+            appfile = file.readlines()
+        app = json.loads(appfile[0])
+    if app.get('tokens') and int(time.time()) < app['tokens'][-1]['expiration']:
+        token = app['tokens'][-1]['value']
+    else:
+        url = 'http://127.0.0.1:5600/open/auth/token'
+        headers = {'client_id': app['client_id'],
+                   'client_secret': app['client_secret']}
+        token = requests.get(url, params=headers, timeout=5).json()['data']['token']
+    return token
+
+
+async def get_cks():
+    if QL:
+        url = 'http://127.0.0.1:5600/open/envs'
+        params = {
+            't': int(round(time.time() * 1000)),
+            'searchValue': 'JD_COOKIE'
+        }
+        token = await ql_token()
+        headers = {'Authorization': f'Bearer {token}'}
+        res = requests.get(url, params=params, headers=headers).json()
+        cks = [i['value'] for i in res['data']]
+    else:
+        res = re.findall(r'pt_key=\S*?;.*?pt_pin=\S*?;', rwcon("str"))
+        cks = [i for i in res if 'pin=xxxx;' not in i]
+    return cks
+
+
+async def execute(msg, info, exectext):
+    """
+    执行命令
+    """
     try:
-        msg = await jdbot.send_message(chat_id, "开始执行命令")
-        p = await asyncio.create_subprocess_shell(
-            cmdtext, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        info += f'\n\n==========📣开始执行📣=========\n'
+        if isinstance(msg, int):
+            msg = await jdbot.send_message(msg, info)
+        else:
+            msg = await msg.edit(info)
+        p = await asyncio.create_subprocess_shell(exectext, shell=True, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=os.environ)
         res_bytes, res_err = await p.communicate()
-        res = res_bytes.decode("utf-8")
-        if res.find("先登录") > -1:
-            await jdbot.delete_messages(chat_id, msg)
-            res, msg = ql_login()
-            await jdbot.send_message(chat_id, msg)
-            return
+        res = res_bytes.decode('utf-8')
         if len(res) == 0:
-            await jdbot.edit_message(msg, "已执行，但返回值为空")
-        elif len(res) <= 4000:
-            await jdbot.delete_messages(chat_id, msg)
-            await jdbot.send_message(chat_id, res)
-        elif len(res) > 4000:
-            tmp_log = f'{LOG_DIR}/bot/{cmdtext.split("/")[-1].split(".js")[0]}-{datetime.datetime.now().strftime("%H-%M-%S")}.log'
-            with open(tmp_log, "w+", encoding="utf-8") as f:
-                f.write(res)
-            await jdbot.delete_messages(chat_id, msg)
-            await jdbot.send_message(chat_id, "执行结果较长，请查看日志", file=tmp_log)
-            os.remove(tmp_log)
+            info += '\n已执行，但返回值为空'
+            await msg.edit(info)
+            return
+        else:
+            try:
+                logtime = f'执行时间：' + re.findall(r'脚本执行- 北京时间.UTC.8.：(.*?)=', res, re.S)[0] + '\n'
+                info += logtime
+            except:
+                pass
+            if re.search('系统通知', res, re.S):
+                loginfo = ('\n' + '=' * 34 + '\n').join(re.findall('=+📣系统通知📣=+(.*?)\n🔔', res, re.S))
+            else:
+                loginfo = res
+            errinfo = '\n**——‼错误代码493，IP可能黑了‼——**\n' if re.search('Response code 493', res) else ''
+            if len(info + loginfo + errinfo) <= 4000:
+                await msg.edit(info + loginfo + errinfo)
+            elif len(info + loginfo + errinfo) > 4000:
+                tmp_log = f'{LOG_DIR}/bot/{exectext.split("/")[-1].split(".js")[0].split(".py")[0].split(".pyc")[0].split(".sh")[0].split(".ts")[0].split(" ")[-1]}-{datetime.datetime.now().strftime("%H-%M-%S.%f")}.log'
+                with open(tmp_log, 'w+', encoding='utf-8') as f:
+                    f.write(res)
+                await msg.delete()
+                info += '\n执行结果较长，请查看日志'
+                await jdbot.send_message(msg.chat_id, info + errinfo, file=tmp_log)
+                os.remove(tmp_log)
     except Exception as e:
-        await jdbot.send_message(chat_id, f"something wrong,I\"m sorry\n{str(e)}")
-        logger.error(f"something wrong,I\"m sorry\n{str(e)}")
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
 
 
 def get_ch_names(path, dir):
@@ -152,11 +192,7 @@ def get_ch_names(path, dir):
         try:
             if os.path.isdir(f"{path}/{file}"):
                 file_ch_names.append(file)
-            elif file.endswith(".js") \
-                    and file != "jdCookie.js" \
-                    and file != "getJDCookie.js" \
-                    and file != "JD_extra_cookie.js" \
-                    and "ShareCode" not in file:
+            elif file.endswith(".js") and file != "jdCookie.js" and file != "getJDCookie.js" and file != "JD_extra_cookie.js" and "ShareCode" not in file:
                 with open(f"{path}/{file}", "r", encoding="utf-8") as f:
                     lines = f.readlines()
                 for line in lines:
@@ -181,9 +217,9 @@ def get_ch_names(path, dir):
 async def log_btn(conv, sender, path, msg, page, files_list):
     """定义log日志按钮"""
     buttons = [
-        Button.inline("上一页", data="up"), 
-        Button.inline("下一页", data="next"), 
-        Button.inline("上级", data="updir"), 
+        Button.inline("上一页", data="up"),
+        Button.inline("下一页", data="next"),
+        Button.inline("上级", data="updir"),
         Button.inline("取消", data="cancel")
     ]
     try:
@@ -196,20 +232,11 @@ async def log_btn(conv, sender, path, msg, page, files_list):
             dir = os.listdir(path)
             dir.sort()
             if path == LOG_DIR:
-                markup = [
-                    Button.inline("_".join(file.split("_")[-2:]), data=str(file))
-                    for file in dir
-                ]
+                markup = [Button.inline("_".join(file.split("_")[-2:]), data=str(file)) for file in dir]
             elif os.path.dirname(os.path.realpath(path)) == LOG_DIR:
-                markup = [
-                    Button.inline("-".join(file.split("-")[-5:]), data=str(file))
-                    for file in dir
-                ]
+                markup = [Button.inline("-".join(file.split("-")[-5:]), data=str(file)) for file in dir]
             else:
-                markup = [
-                    Button.inline(file, data=str(file))
-                    for file in dir
-                ]
+                markup = [Button.inline(file, data=str(file)) for file in dir]
             markup = split_list(markup, row)
             if len(markup) > 30:
                 markup = split_list(markup, 30)
@@ -220,8 +247,7 @@ async def log_btn(conv, sender, path, msg, page, files_list):
                 if path == JD_DIR:
                     new_markup.append([Button.inline("取消", data="cancel")])
                 else:
-                    new_markup.append(
-                        [Button.inline("上级", data="updir"), Button.inline("取消", data="cancel")])
+                    new_markup.append([Button.inline("上级", data="updir"), Button.inline("取消", data="cancel")])
         msg = await jdbot.edit_message(msg, "请做出您的选择：", buttons=new_markup)
         convdata = await conv.wait_event(press_event(sender))
         res = bytes.decode(convdata.data)
@@ -230,12 +256,12 @@ async def log_btn(conv, sender, path, msg, page, files_list):
             conv.cancel()
             return None, None, None, None
         elif res == "next":
-            page = page + 1
+            page += 1
             if page > len(markup) - 1:
                 page = 0
             return path, msg, page, markup
         elif res == "up":
-            page = page - 1
+            page -= 1
             if page < 0:
                 page = len(markup) - 1
             return path, msg, page, markup
@@ -256,17 +282,22 @@ async def log_btn(conv, sender, path, msg, page, files_list):
         await jdbot.edit_message(msg, "选择已超时，本次对话已停止")
         return None, None, None, None
     except Exception as e:
-        await jdbot.edit_message(msg, f"something wrong,I\"m sorry\n{str(e)}")
-        logger.error(f"something wrong,I\"m sorry\n{str(e)}")
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.edit_message(msg, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
         return None, None, None, None
 
 
 async def snode_btn(conv, sender, path, msg, page, files_list):
     """定义scripts脚本按钮"""
     buttons = [
-        Button.inline("上一页", data="up"), 
-        Button.inline("下一页", data="next"), 
-        Button.inline("上级", data="updir"), 
+        Button.inline("上一页", data="up"),
+        Button.inline("下一页", data="next"),
+        Button.inline("上级", data="updir"),
         Button.inline("取消", data="cancel")
     ]
     try:
@@ -285,8 +316,7 @@ async def snode_btn(conv, sender, path, msg, page, files_list):
                 if BOT_SET["中文"].lower() == "true":
                     dir = get_ch_names(path, dir)
             dir.sort()
-            markup = [Button.inline(file.split("--->")[0], data=str(file.split("--->")[-1]))
-                      for file in dir if os.path.isdir(f"{path}/{file}") or file.endswith(".js")]
+            markup = [Button.inline(file.split("--->")[0], data=str(file.split("--->")[-1])) for file in dir if os.path.isdir(f"{path}/{file}") or file.endswith(".js")]
             markup = split_list(markup, row)
             if len(markup) > 30:
                 markup = split_list(markup, 30)
@@ -297,8 +327,7 @@ async def snode_btn(conv, sender, path, msg, page, files_list):
                 if path == JD_DIR:
                     new_markup.append([Button.inline("取消", data="cancel")])
                 else:
-                    new_markup.append(
-                        [Button.inline("上级", data="updir"), Button.inline("取消", data="cancel")])
+                    new_markup.append([Button.inline("上级", data="updir"), Button.inline("取消", data="cancel")])
         msg = await jdbot.edit_message(msg, "请做出您的选择：", buttons=new_markup)
         convdata = await conv.wait_event(press_event(sender))
         res = bytes.decode(convdata.data)
@@ -307,12 +336,12 @@ async def snode_btn(conv, sender, path, msg, page, files_list):
             conv.cancel()
             return None, None, None, None
         elif res == "next":
-            page = page + 1
+            page += 1
             if page > len(markup) - 1:
                 page = 0
             return path, msg, page, markup
         elif res == "up":
-            page = page - 1
+            page -= 1
             if page < 0:
                 page = len(markup) - 1
             return path, msg, page, markup
@@ -324,17 +353,22 @@ async def snode_btn(conv, sender, path, msg, page, files_list):
         elif os.path.isfile(f"{path}/{res}"):
             conv.cancel()
             logger.info(f"{path}/{res} 脚本即将在后台运行")
-            msg = await jdbot.edit_message(msg, f"{res} 在后台运行成功")
+            msg = await jdbot.edit_message(msg, f"{res} 在后台开始运行")
             cmdtext = f"{TASK_CMD} {path}/{res} now"
             return None, None, None, f"CMD-->{cmdtext}"
         else:
             return f"{path}/{res}", msg, page, None
     except asyncio.exceptions.TimeoutError:
-        msg = await jdbot.edit_message(msg, "选择已超时，对话已停止")
+        await jdbot.edit_message(msg, "选择已超时，对话已停止")
         return None, None, None, None
     except Exception as e:
-        msg = await jdbot.edit_message(msg, f"something wrong,I\"m sorry\n{str(e)}")
-        logger.error(f"something wrong,I\"m sorry\n{str(e)}")
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.edit_message(msg, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
         return None, None, None, None
 
 
@@ -392,8 +426,7 @@ async def add_cron(jdbot, conv, resp, filename, msg, sender, markup, path):
     if QL:
         with open(AUTH_FILE, "r", encoding="utf-8") as f:
             auth = json.load(f)
-        res = cron_manage_QL("add", json.loads(
-            str(crondata).replace("'", '"')), auth["token"])
+        res = cron_manage_QL("add", json.loads(str(crondata).replace("'", '"')), auth["token"])
         if res["code"] == 200:
             await jdbot.send_message(chat_id, f"{filename}已保存到{path}，并已尝试添加定时任务")
         else:
@@ -405,7 +438,7 @@ async def add_cron(jdbot, conv, resp, filename, msg, sender, markup, path):
 
 @Ver_Main
 def cron_manage_QL(fun, crondata, token):
-    url = "http://127.0.0.1:5600/api/crons"
+    url = "http://127.0.0.1:5600/open/crons"
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -424,29 +457,50 @@ def cron_manage_QL(fun, crondata, token):
             }
             res = requests.post(url, data=data, headers=headers).json()
         elif fun == "run":
-            data = [crondata["_id"]]
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [crondata["id"]]
+            else:
+                data = [crondata["_id"]]
             res = requests.put(f"{url}/run", json=data, headers=headers).json()
         elif fun == "log":
-            data = crondata["_id"]
+            if os.path.exists(QL_SQLITE_FILE):
+                data = crondata["id"]
+            else:
+                data = crondata["_id"]
             res = requests.get(f"{url}/{data}/log", headers=headers).json()
         elif fun == "edit":
-            data = {
-                "name": crondata["name"],
-                "command": crondata["command"],
-                "schedule": crondata["schedule"],
-                "_id": crondata["_id"]
-            }
+            if os.path.exists(QL_SQLITE_FILE):
+                data = {
+                    "name": crondata["name"],
+                    "command": crondata["command"],
+                    "schedule": crondata["schedule"],
+                    "id": crondata["id"]
+                }
+            else:
+                data = {
+                    "name": crondata["name"],
+                    "command": crondata["command"],
+                    "schedule": crondata["schedule"],
+                    "_id": crondata["_id"]
+                }
             res = requests.put(url, json=data, headers=headers).json()
         elif fun == "disable":
-            data = [crondata["_id"]]
-            res = requests.put(url + "/disable", json=data,
-                               headers=headers).json()
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [crondata["id"]]
+            else:
+                data = [crondata["_id"]]
+            res = requests.put(url + "/disable", json=data, headers=headers).json()
         elif fun == "enable":
-            data = [crondata["_id"]]
-            res = requests.put(url + "/enable", json=data,
-                               headers=headers).json()
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [crondata["id"]]
+            else:
+                data = [crondata["_id"]]
+            res = requests.put(url + "/enable", json=data, headers=headers).json()
         elif fun == "del":
-            data = [crondata["_id"]]
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [crondata["id"]]
+            else:
+                data = [crondata["_id"]]
             res = requests.delete(url, json=data, headers=headers).json()
         else:
             res = {"code": 400, "data": "未知功能"}
@@ -471,7 +525,7 @@ def cron_manage_V4(fun, crondata):
             v4crons.append(crondata)
             res = {"code": 200, "data": "success"}
         elif fun == "run":
-            cmd(f'jtask {crondata.split("task")[-1]}')
+            os.system(f'jtask {crondata.split("task")[-1]}')
             res = {"code": 200, "data": "success"}
         elif fun == "edit":
             ocron, ncron = crondata.split("-->")
@@ -517,7 +571,7 @@ def cron_manage(fun, crondata, token):
 
 @Ver_Main
 def env_manage_QL(fun, envdata, token):
-    url = "http://127.0.0.1:5600/api/envs"
+    url = "http://127.0.0.1:5600/open/envs"
     headers = {
         "Authorization": f"Bearer {token}"
     }
@@ -536,23 +590,38 @@ def env_manage_QL(fun, envdata, token):
             }
             res = requests.post(url, json=[data], headers=headers).json()
         elif fun == "edit":
-            data = {
-                "name": envdata["name"],
-                "value": envdata["value"],
-                "_id": envdata["_id"],
-                "remarks": envdata["remarks"] if "remarks" in envdata.keys() else ''
-            }
+            if os.path.exists(QL_SQLITE_FILE):
+                data = {
+                    "name": envdata["name"],
+                    "value": envdata["value"],
+                    "id": envdata["id"],
+                    "remarks": envdata["remarks"] if "remarks" in envdata.keys() else ''
+                }
+            else:
+                data = {
+                    "name": envdata["name"],
+                    "value": envdata["value"],
+                    "_id": envdata["_id"],
+                    "remarks": envdata["remarks"] if "remarks" in envdata.keys() else ''
+                }
             res = requests.put(url, json=data, headers=headers).json()
         elif fun == "disable":
-            data = [envdata["_id"]]
-            res = requests.put(url + "/disable", json=data,
-                               headers=headers).json()
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [envdata["id"]]
+            else:
+                data = [envdata["_id"]]
+            res = requests.put(url + "/disable", json=data, headers=headers).json()
         elif fun == "enable":
-            data = [envdata["_id"]]
-            res = requests.put(url + "/enable", json=data,
-                               headers=headers).json()
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [envdata["id"]]
+            else:
+                data = [envdata["_id"]]
+            res = requests.put(url + "/enable", json=data, headers=headers).json()
         elif fun == "del":
-            data = [envdata["_id"]]
+            if os.path.exists(QL_SQLITE_FILE):
+                data = [envdata["id"]]
+            else:
+                data = [envdata["_id"]]
             res = requests.delete(url, json=data, headers=headers).json()
         else:
             res = {"code": 400, "data": "未知功能"}

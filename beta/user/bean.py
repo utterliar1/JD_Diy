@@ -13,12 +13,10 @@ import traceback
 
 from telethon import events
 
-from .login import user
-from .. import chat_id, jdbot, logger, JD_DIR
-from ..user.utils import bot_id
+from .. import bot_id, chat_id, client, JD_DIR, jdbot, logger
 
 
-@user.on(events.NewMessage(from_users=chat_id, pattern=r"^-[bc]\s\d+$"))
+@client.on(events.NewMessage(from_users=chat_id, pattern=r"^-[bc]\s*\d*$"))
 async def beanchange(event):
     """
     京豆收支变化
@@ -37,13 +35,13 @@ async def beanchange(event):
             jpeg = JD_DIR + '/log/bot/bean.jpeg'
         if event.chat_id != bot_id:
             msg = await event.edit("正在查询，请稍后")
-            await user.send_message(bot_id, cmdline)
+            await client.send_message(bot_id, cmdline)
             await asyncio.sleep(7)
             await msg.delete()
-            await user.send_message(event.chat_id, f'您的账号{num}收支情况', file=jpeg)
+            await client.send_message(event.chat_id, f'您的账号{num}收支情况', file=jpeg)
         else:
             await event.delete()
-            await user.send_message(bot_id, cmdline)
+            await client.send_message(bot_id, cmdline)
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]

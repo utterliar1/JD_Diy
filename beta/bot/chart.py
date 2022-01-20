@@ -1,7 +1,13 @@
+import os
+import traceback
+
 from telethon import events
-from .. import jdbot, chat_id, LOG_DIR, logger, BOT_SET, ch_name
-from ..bot.quickchart import QuickChart
+
 from .beandata import get_bean_data
+from .. import BOT_SET, ch_name, chat_id, jdbot, LOG_DIR, logger
+from ..bot.quickchart import QuickChart
+from ..bot.utils import get_cks
+
 BEAN_IMG = f'{LOG_DIR}/bot/bean.jpeg'
 
 
@@ -15,17 +21,24 @@ async def my_chart(event):
         else:
             text = None
         if text:
-            res = get_bean_data(int(text))
+            cookies = await get_cks()
+            res = get_bean_data(int(text), cookies)
             if res['code'] != 200:
-                msg = await jdbot.edit_message(msg, f'something wrong,I\'m sorry\n{str(res["data"])}')
+                await msg.edit(f'错误：\n{str(res["data"])}')
             else:
                 creat_chart(res['data'][3], f'账号{str(text)}', res['data'][0], res['data'][1], res['data'][2][1:])
-                msg = await jdbot.edit_message(msg, f'您的账号{text}收支情况', file=BEAN_IMG)
+                await msg.delete()
+                await jdbot.send_message(chat_id, f'您的账号{text}收支情况', file=BEAN_IMG)
         else:
-            msg = await jdbot.edit_message(msg, '请正确使用命令\n/chart n n为第n个账号')
+            await jdbot.edit_message(msg, '请正确使用命令\n/chart n n为第n个账号')
     except Exception as e:
-        await jdbot.edit_message(msg, f'something wrong,I\'m sorry\n{str(e)}')
-        logger.error(f'something wrong,I\'m sorry\n{str(e)}')
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
 
 
 def creat_chart(xdata, title, bardata, bardata2, linedate):
@@ -111,7 +124,7 @@ def creat_chart(xdata, title, bardata, bardata2, linedate):
                         "display": False,
                         "position": "left",
                         "ticks": {
-                            "max": int(int(max([max(bardata), max(bardata2)])+100)*2)
+                            "max": int(int(max([max(bardata), max(bardata2)]) + 100) * 2)
                         },
                         "scaleLabel": {
                             "fontSize": 20,
@@ -123,7 +136,7 @@ def creat_chart(xdata, title, bardata, bardata2, linedate):
                         "type": "linear",
                         "display": False,
                         "ticks": {
-                            "min": int(min(linedate)*2-(max(linedate))-100),
+                            "min": int(min(linedate) * 2 - (max(linedate)) - 100),
                             "max": int(int(max(linedate)))
                         },
                         "position": "right"

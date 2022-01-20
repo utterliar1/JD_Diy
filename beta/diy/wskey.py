@@ -3,17 +3,17 @@
 
 import os
 import re
-import sys
+import traceback
 
-from requests import get, put, post
-from telethon import events, Button
+from requests import get, post, put
+from telethon import Button, events
 
-from .. import chat_id, jdbot, logger, CONFIG_DIR
-from ..bot.utils import V4, AUTH_FILE, press_event, split_list, row, cmd
-from ..diy.utils import QL2, ql_token, wskey, read, write
+from .. import chat_id, CONFIG_DIR, jdbot, logger
+from ..bot.utils import execute, press_event, ql_token, row, rwcon, split_list, V4
+from ..diy.utils import QL2, wskey
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^pin=.*;wskey=.*'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^pin=.*;wskey=.*'))
 async def myaddwskey(event):
     try:
         text = ""
@@ -25,7 +25,7 @@ async def myaddwskey(event):
             file = "/ql/db/wskey.list"
         if not os.path.exists(file):
             if V4 or QL2:
-                configs = read("str")
+                configs = rwcon("str")
                 if "wskey" not in configs:
                     sender = event.sender_id
                     async with jdbot.conversation(sender, timeout=120) as conv:
@@ -45,8 +45,8 @@ async def myaddwskey(event):
                             os.system(f"touch {file}")
                         msg = await jdbot.edit_message(msg, f'你的选择是：存储在{res}中\n准备继续工作……')
             else:
-                token = ql_token(AUTH_FILE)
-                url = 'http://127.0.0.1:5600/api/envs'
+                token = await ql_token()
+                url = 'http://127.0.0.1:5600/open/envs'
                 headers = {'Authorization': f'Bearer {token}'}
                 body = {'searchValue': "JD_WSCK"}
                 data = get(url, headers=headers, params=body).json()['data']
@@ -89,12 +89,12 @@ async def myaddwskey(event):
                 pin, key = ws[0], ws[1]
                 message = pin + key + ";"
                 pt_pin = re.findall(r'pin=(.*);', pin)[0]
-                configs = read("str")
+                configs = rwcon("str")
                 if pin + "wskey" in configs:
                     configs = re.sub(f'{pin}wskey=.*;', message, configs)
                     text += f"更新wskey成功！pin为：{pt_pin}\n"
                 elif V4 and f"pt_pin={pt_pin}" in configs:
-                    configs = read("list")
+                    configs = rwcon("list")
                     for config in configs:
                         if f"pt_pin={pt_pin}" in config:
                             line = configs.index(config)
@@ -106,7 +106,7 @@ async def myaddwskey(event):
                             await jdbot.send_message(chat_id, "请使用标准模板！")
                             return
                 elif V4 and f"pt_pin={pt_pin}" not in configs:
-                    configs, line, num = read("list"), 0, 0
+                    configs, line, num = rwcon("list"), 0, 0
                     for config in configs:
                         if "pt_pin" in config and "##" not in config:
                             line = configs.index(config) + 1
@@ -117,14 +117,14 @@ async def myaddwskey(event):
                     configs.insert(line, f'wskey{str(num)}="{message}"\n')
                     text += f"新增wskey成功！pin为：{pt_pin} 但请在配置中输入cookie值！\n"
                 else:
-                    configs = read("str")
+                    configs = rwcon("str")
                     configs += f"{message}\n"
                     text += f"新增wskey成功！pin为：{pt_pin}\n"
                 msg = await jdbot.edit_message(msg, text)
-                write(configs)
+                rwcon(configs)
         else:
-            token = ql_token(AUTH_FILE)
-            url = 'http://127.0.0.1:5600/api/envs'
+            token = await ql_token()
+            url = 'http://127.0.0.1:5600/open/envs'
             headers = {'Authorization': f'Bearer {token}'}
             for message in messages:
                 ws = re.findall(r'(pin=.*)(wskey=[^;]*);*', message)[0]
@@ -150,16 +150,16 @@ async def myaddwskey(event):
         if len(text) > 1:
             if os.path.exists("/jd/own/wskey_ptkey.py"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await cmd("python /jd/own/wskey_ptkey.py")
+                await execute(chat_id, None, "python /jd/own/wskey_ptkey.py")
             elif os.path.exists("/jd/scripts/wskey_ptkey.py"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await cmd("python /jd/scripts/wskey_ptkey.py")
+                await execute(chat_id, None, "python /jd/scripts/wskey_ptkey.py")
             elif os.path.exists("/ql/scripts/wskey_ptkey.py"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await cmd("task /ql/scripts/wskey_ptkey.py")
+                await execute(chat_id, None, "task /ql/scripts/wskey_ptkey.py")
             elif os.path.exists("/ql/scripts/ql_pandaAPI_refreshCK.py") and not os.path.exists("/ql/db/wskey.list"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await cmd("task /ql/scripts/ql_pandaAPI_refreshCK.py")
+                await execute(chat_id, None, "task /ql/scripts/ql_pandaAPI_refreshCK.py")
             elif os.path.exists("/ql/raw/ql_pandaAPI_refreshCK.py") and not os.path.exists("/ql/db/wskey.list"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
             elif os.path.exists("/ql/scripts/ql_pandaAPI_refreshCK.py") and os.path.exists("/ql/db/wskey.list"):
@@ -171,7 +171,8 @@ async def myaddwskey(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")

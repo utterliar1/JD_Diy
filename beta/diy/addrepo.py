@@ -2,21 +2,20 @@
 # -*- coding: utf-8 -*-
 
 
-from asyncio import exceptions
-
 import os
 import re
-import requests
-import sys
 import time
-from telethon import events, Button
+import traceback
+from asyncio import exceptions
 
-from .. import chat_id, jdbot, logger, ch_name, BOT_SET
-from ..bot.utils import press_event, V4, QL, cmd, split_list, row, AUTH_FILE, cron_manage_QL
-from ..diy.utils import ql_token, read, write
+import requests
+from telethon import Button, events
+
+from .. import chat_id, jdbot, logger
+from ..bot.utils import cron_manage_QL, execute, press_event, QL, ql_token, row, rwcon, split_list, V4
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^https?://github\.com/\S+git$'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^https?://github\.com/\S+git$'))
 async def myaddrepo(event):
     try:
         SENDER = event.sender_id
@@ -80,8 +79,8 @@ async def myaddrepo(event):
                 ],
                 [
                     Button.inline("不设置", data="root"),
-                     Button.inline('手动输入', data='input'),
-                     Button.inline('取消对话', data='cancel')
+                    Button.inline('手动输入', data='input'),
+                    Button.inline('取消对话', data='cancel')
                 ],
                 [
                     Button.inline("默认每天0点", data="root"),
@@ -110,7 +109,7 @@ async def myaddrepo(event):
             conv.cancel()
         if V4:
             nums = []
-            configs = read("list")
+            configs = rwcon("list")
             for config in configs:
                 if '启用其他开发者的仓库方式一' in config:
                     start_line = configs.index(config)
@@ -147,9 +146,9 @@ async def myaddrepo(event):
                         configs.insert(configs.index(config) + 1, OwnRepoBranch)
                     elif config.find(f'OwnRepoPath{nums[-1]}') != -1 and config.find("## ") == -1:
                         configs.insert(configs.index(config) + 1, OwnRepoPath)
-            write(configs)
-            await jdbot.send_message(chat_id, "现在开始拉取仓库，稍后请自行查看结果")
-            await cmd("jup own")
+            rwcon(configs)
+            info = "现在开始拉取仓库，稍后请自行查看结果"
+            await execute(chat_id, info, "jup own")
         else:
             branch = replies[0].replace("root", "")
             path = replies[1].replace(" ", "|").replace("root", "")
@@ -158,14 +157,15 @@ async def myaddrepo(event):
             cron = replies[4].replace("root", "0 0 * * *")
             command = f'ql repo {url} "{path}" "{blacklist}" "{dependence}" "{branch}"'
             data = {
-                "name": "拉取仓库",
+                "name": f"{git_name} 仓库",
                 "command": command,
                 "schedule": cron
             }
-            res = cron_manage_QL("add", data, ql_token(AUTH_FILE))
+            token = await ql_token()
+            res = cron_manage_QL("add", data, token)
             if res['code'] == 200:
-                await jdbot.send_message(chat_id, "新增仓库的定时任务成功")
-                await cmd(command)
+                info = f"新增{git_name} 仓库的定时任务成功"
+                await execute(chat_id, info, command)
             elif res['code'] == 500:
                 await jdbot.send_message(chat_id, "cron表达式有错误！")
             else:
@@ -175,14 +175,11 @@ async def myaddrepo(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-
-
-if ch_name:
-    jdbot.add_event_handler(myaddrepo, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))
 
 
 @jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^ql repo'))
@@ -196,7 +193,7 @@ async def myqladdrepo(event):
                 await jdbot.send_message(chat_id, "没有设置仓库链接")
                 return
             async with jdbot.conversation(SENDER, timeout=60) as conv:
-                msg = await conv.send_message("请设置任务名称")
+                msg = await conv.send_message("请设置仓库名称")
                 reply = await conv.get_response()
                 taskname = reply.raw_text
                 await jdbot.delete_messages(chat_id, msg)
@@ -210,10 +207,11 @@ async def myqladdrepo(event):
                 "name": taskname,
                 "schedule": cron
             }
-            res = cron_manage_QL("add", data, ql_token(AUTH_FILE))
+            token = await ql_token()
+            res = cron_manage_QL("add", data, token)
             if res['code'] == 200:
-                await jdbot.send_message(chat_id, "新增仓库的定时任务成功")
-                await cmd(message)
+                info = "新增仓库的定时任务成功"
+                await execute(chat_id, info, message)
             elif res['code'] == 500:
                 await jdbot.send_message(chat_id, "cron表达式有错误！")
             else:
@@ -221,15 +219,11 @@ async def myqladdrepo(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-
-
-if ch_name:
-    jdbot.add_event_handler(myqladdrepo, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))
-
 
 
 @jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/repo$'))
@@ -252,7 +246,7 @@ async def myrepo(event):
                 Button.inline("取消会话", data="cancel")
             ]
         if V4:
-            configs = read("list")
+            configs = rwcon("list")
             r_names, r_urls, r_namesline, r_branchs, r_branchsline, r_paths, r_pathsline, r_status, r_nums, btns_1 = [], [], [], [], [], [], [], [], [], []
             for config in configs:
                 if config.find("OwnRepoUrl") != -1 and config.find("## ") == -1:
@@ -323,14 +317,14 @@ async def myrepo(event):
                     configs = ''.join(configs)
                 elif res == 'delete':
                     await jdbot.edit_message(msg, "删除仓库")
-                    configs = read("str")
+                    configs = rwcon("str")
                     configs = re.sub(f"OwnRepoUrl{num}=.*", "", configs)
                     configs = re.sub(f"OwnRepoBranch{num}=.*", "", configs)
                     configs = re.sub(f"OwnRepoPath{num}=.*", "", configs)
-                write(configs)
+                rwcon(configs)
         else:
-            token = ql_token(AUTH_FILE)
-            url = 'http://127.0.0.1:5600/api/crons'
+            token = await ql_token()
+            url = 'http://127.0.0.1:5600/open/crons'
             body = {
                 "searchValue": "ql repo",
                 "t": int(round(time.time() * 1000))
@@ -386,10 +380,8 @@ async def myrepo(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-
-if ch_name:
-    jdbot.add_event_handler(myqladdrepo, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))

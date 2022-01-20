@@ -1,12 +1,14 @@
-from telethon import events, Button
-import json
 import os
+import traceback
 from asyncio import exceptions
-from .. import jdbot, chat_id, logger, LOG_DIR, ch_name, BOT_SET
-from ..bot.utils import QL, press_event, split_list, cron_manage, AUTH_FILE, row
+
+from telethon import Button, events
+
+from .. import BOT_SET, ch_name, chat_id, jdbot, LOG_DIR, logger
+from ..bot.utils import cron_manage, press_event, QL, ql_token, row, split_list
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/cron'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/cron'))
 async def my_cron(event):
     """接收/cron后执行程序"""
     logger.info(f'即将执行{event.raw_text}命令')
@@ -15,8 +17,7 @@ async def my_cron(event):
         SENDER = event.sender_id
         msg = await jdbot.send_message(chat_id, '正在查询请稍后')
         if QL:
-            with open(AUTH_FILE, 'r', encoding='utf-8') as f:
-                auth = json.load(f)
+            token = await ql_token()
             buttons = [
                 {'name': '运行', 'data': 'run'},
                 {'name': '日志', 'data': 'log'},
@@ -28,7 +29,7 @@ async def my_cron(event):
                 {'name': '上级', 'data': 'up'}
             ]
         else:
-            auth = {'token': ''}
+            token = ''
             buttons = [
                 {'name': '运行', 'data': 'run'},
                 {'name': '编辑', 'data': 'edit'},
@@ -49,7 +50,7 @@ async def my_cron(event):
         go_up = True
         async with jdbot.conversation(SENDER, timeout=60) as conv:
             while go_up:
-                res = cron_manage('search', text, auth['token'])
+                res = cron_manage('search', text, token)
                 logger.info(f'任务查询结果：{res}')
                 if res['code'] == 200:
                     await jdbot.delete_messages(chat_id, msg)
@@ -94,17 +95,16 @@ async def my_cron(event):
                         respones = respones.raw_text
                         if QL:
                             res['data'][int(resp)]['name'], res['data'][int(resp)]['command'], res['data'][int(resp)]['schedule'] = respones.split('-->')
-                            cronres = cron_manage('edit', res['data'][int(resp)], auth['token'])
+                            cronres = cron_manage('edit', res['data'][int(resp)], token)
                         else:
-                            cronres = cron_manage('edit', f'{resp}-->{respones}\n', auth['token'])
+                            cronres = cron_manage('edit', f'{resp}-->{respones}\n', token)
                     else:
                         go_up = False
                         if QL:
                             crondata = res['data'][int(resp)]
                         else:
                             crondata = resp
-                        cronres = cron_manage(
-                            btnres, crondata, auth['token'])
+                        cronres = cron_manage(btnres, crondata, token)
                     if cronres['code'] == 200:
                         if 'data' not in cronres.keys():
                             cronres['data'] = 'success'
@@ -127,24 +127,27 @@ async def my_cron(event):
         await jdbot.edit_message(msg, '选择已超时，对话已停止')
         logger.error(f'选择已超时，对话已停止')
     except Exception as e:
-        await jdbot.edit_message(msg, f'something wrong,I\'m sorry\n{str(e)}')
-        logger.error(f'something wrong,I\'m sorry\n{str(e)}')
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/addcron'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/addcron'))
 async def my_addcron(event):
     try:
         SENDER = event.sender_id
         msg = await jdbot.send_message(chat_id, f'请稍后，正在查询')
         if QL:
-            with open(AUTH_FILE, 'r', encoding='utf-8') as f:
-                auth = json.load(f)
+            token = await ql_token()
             info = '任务名称-->任务命令-->定时\n```测试2-->ql repo xxxxxx.git "jd"-->0 6 * * *```'
         else:
             info = '```0 0 * * * jtask /jd/own/abcd.js```'
-            auth = {'token': ''}
-        markup = [Button.inline('是', data='yes'),
-                  Button.inline('否', data='cancel')]
+            token = ''
+        markup = [Button.inline('是', data='yes'), Button.inline('否', data='cancel')]
         async with jdbot.conversation(SENDER, timeout=30) as conv:
             await jdbot.delete_messages(chat_id, msg)
             msg = await conv.send_message('是否确认添加cron', buttons=markup)
@@ -158,15 +161,12 @@ async def my_addcron(event):
                 msg = await conv.send_message(f'点击复制下方信息进行修改,并发送给我\n{info}')
                 resp = await conv.get_response()
                 if QL:
-                    crondata = {
-                        'name': (resp.raw_text.split('-->'))[0],
-                        'command': (resp.raw_text.split('-->'))[1],
-                        'schedule': (resp.raw_text.split('-->'))[2]
-                    }
-                    res = cron_manage('add', crondata, auth['token'])
+                    resplist = resp.raw_text.split('-->')
+                    crondata = {'name': resplist[0], 'command': resplist[1], 'schedule': resplist[2]}
+                    res = cron_manage('add', crondata, token)
                 else:
                     crondata = resp.raw_text
-                    res = cron_manage('add', crondata, auth['token'])
+                    res = cron_manage('add', crondata, token)
                 if res['code'] == 200:
                     await jdbot.delete_messages(chat_id, msg)
                     msg = await jdbot.send_message(chat_id, '已成功添加定时任务')
@@ -176,13 +176,15 @@ async def my_addcron(event):
     except exceptions.TimeoutError:
         await jdbot.edit_message(msg, '选择已超时，对话已停止')
     except Exception as e:
-        await jdbot.edit_message(msg, f'something wrong,I\'m sorry\n{str(e)}')
-        logger.error(f'something wrong,I\'m sorry\n{str(e)}')
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
 
 
 if ch_name:
-    jdbot.add_event_handler(my_cron, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))
-
-
-if ch_name:
-    jdbot.add_event_handler(my_addcron, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['addcron']))
+    jdbot.add_event_handler(my_cron, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))
+    jdbot.add_event_handler(my_addcron, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['addcron']))
