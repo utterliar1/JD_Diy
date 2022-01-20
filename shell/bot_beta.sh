@@ -93,8 +93,16 @@ packages() {
 start() {
   echo "4、启动bot程序..."
   if [[ -z $(grep -E "123456789" $file_bot) ]]; then
-    cd $dir_jbot || exit; pm2 start ecosystem.config.js
-    echo "bot启动成功..."
+    if [ -d "/ql" ]; then
+      ps -ef | grep "python3 -m jbot" | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null
+      nohup python3 -m jbot >$root/log/bot/bot.log 2>&1 &
+      echo -e "bot启动成功...\n"
+    else
+      cd $dir_jbot || exit; pm2 start ecosystem.config.js
+      cd $root || exit
+      pm2 restart jbot
+      echo "bot启动成功..."
+    fi
   else
     echo "配置 $file_bot 后再次运行本程序即可启动机器人"
   fi
