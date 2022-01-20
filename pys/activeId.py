@@ -10,7 +10,7 @@ def GET_TUAN_ID():
             r = requests.get(url)
             if r.ok:
                 resp = r.text
-                TUAN_ACTIVEID = re.findall('((?<=.)activeId.*?==)(?:.*?)("start".*?(?=,))(?:.*?)("end".*?(?=,))', re.sub('%3D%3D', '==', ''.join(re.findall('({"width".*?})', resp))))[0][0].split("=",1)[1]
+                TUAN_ACTIVEID = re.findall('((?<=.)activeId.*?==)(?:.*?)("start".*?(?=,))(?:.*?)("end".*?(?=,))', re.sub('%3D%3D', '==', ''.join(re.findall('("width".*?})', resp))))[0][0].split("=",1)[1]
                 return TUAN_ACTIVEID
             else:
                 m -= 1
