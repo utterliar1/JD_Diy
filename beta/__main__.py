@@ -89,9 +89,8 @@ async def ql_check():
         elif os.path.exists("/ql/db/app.db"):
             with open("/ql/db/app.db", "r", encoding="utf-8") as file:
                 appfile = file.readlines()
-            app = json.loads(appfile[0])
-            if app.get('scopes'):
-                scopes = app['scopes']
+            if appfile and json.loads(appfile[0]):
+                scopes = json.loads(appfile[0])['scopes']
                 if not {'cronss', 'envs'}.issubset(scopes):
                     await jdbot.send_message(chat_id, '【💥错误💥】\n\n青龙应用权限不足,请增加权限\n\n `定时任务` `环境变量` ')
             else:
