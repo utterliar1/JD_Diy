@@ -91,7 +91,7 @@ async def ql_check():
                 appfile = file.readlines()
             if appfile and json.loads(appfile[0]):
                 scopes = json.loads(appfile[0])['scopes']
-                if not {'cronss', 'envs'}.issubset(scopes):
+                if not {'crons', 'envs'}.issubset(scopes):
                     await jdbot.send_message(chat_id, '【💥错误💥】\n\n青龙应用权限不足,请增加权限\n\n `定时任务` `环境变量` ')
             else:
                 await jdbot.send_message(chat_id, '【💥错误💥】\n\n未找到青龙应用,请新建应用\n\n`青龙面板--系统设置--新建应用`')
