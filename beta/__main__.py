@@ -87,7 +87,7 @@ async def ql_check():
             else:
                 await jdbot.send_message(chat_id, '【💥错误💥】\n\n未找到青龙应用,请新建应用\n\n`青龙面板--系统设置--新建应用`')
         elif os.path.exists("/ql/db/app.db"):
-            with open("app.db", "r", encoding="utf-8") as file:
+            with open("/ql/db/app.db", "r", encoding="utf-8") as file:
                 appfile = file.readlines()
             app = json.loads(appfile[0])
             if app.get('scopes'):

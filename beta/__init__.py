@@ -85,7 +85,7 @@ else:
     jdbot = TelegramClient('bot', API_ID, API_HASH, connection_retries=None, request_retries=10).start(bot_token=TOKEN)
 
 
-# 创建client兑换
+# 创建client对话
 if PROXY_START and BOT.get('noretry') and BOT['noretry']:
     client = TelegramClient(f'{CONFIG_DIR}/user', API_ID, API_HASH, connection=connectionType, proxy=proxy, request_retries=10, device_model=device_model)
 elif PROXY_START:
