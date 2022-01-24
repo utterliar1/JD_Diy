@@ -424,9 +424,8 @@ async def add_cron(jdbot, conv, resp, filename, msg, sender, markup, path):
         await jdbot.delete_messages(chat_id, convmsg)
     await jdbot.delete_messages(chat_id, msg)
     if QL:
-        with open(AUTH_FILE, "r", encoding="utf-8") as f:
-            auth = json.load(f)
-        res = cron_manage_QL("add", json.loads(str(crondata).replace("'", '"')), auth["token"])
+        token = await ql_token()
+        res = cron_manage_QL("add", json.loads(str(crondata).replace("'", '"')), token)
         if res["code"] == 200:
             await jdbot.send_message(chat_id, f"{filename}已保存到{path}，并已尝试添加定时任务")
         else:
