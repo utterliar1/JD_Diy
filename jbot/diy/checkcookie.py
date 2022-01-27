@@ -5,16 +5,16 @@
 import asyncio
 import os
 import re
-import sys
 import time
+import traceback
 from asyncio import exceptions
 
 import requests
 from telethon import events
 
-from .. import chat_id, jdbot, logger
-from ..bot.utils import V4, QL, CONFIG_SH_FILE, get_cks, AUTH_FILE
-from ..diy.utils import QL8, ql_token, read, write
+from .. import chat_id, jdbot, logger, QL_SQLITE_FILE
+from ..bot.utils import get_cks, QL, ql_token, rwcon, V4
+from ..diy.utils import QL8
 
 
 async def checkCookie(cookie):
@@ -50,7 +50,7 @@ async def mycheckcookie(event):
         text, o, res = '检测结果\n\n', '\n\t   └ ', ""
         expireds, valids, changes, removes = [], [], [], []
         if V4:
-            cookies = get_cks(CONFIG_SH_FILE)
+            cookies = await get_cks()
             for cookie in cookies:
                 cknum = cookies.index(cookie) + 1
                 check = await checkCookie(cookie)
@@ -62,9 +62,9 @@ async def mycheckcookie(event):
                 msg = await jdbot.edit_message(msg, res)
             await asyncio.sleep(2)
         elif QL8:
-            token = ql_token(AUTH_FILE)
+            token = await ql_token()
             headers = {'Authorization': f'Bearer {token}'}
-            url = 'http://127.0.0.1:5600/api/envs'
+            url = 'http://127.0.0.1:5600/open/envs'
             body = {'searchValue': 'JD_COOKIE'}
             datas = requests.get(url, params=body, headers=headers).json()['data']
             for data in datas:
@@ -83,23 +83,31 @@ async def mycheckcookie(event):
                         msg = await jdbot.edit_message(msg, res)
                         await asyncio.sleep(1)
                     if len(cookies) != len_cooke:
-                        changes.append(
-                            [data['remarks'] if 'remarks' in data.keys() else '未备注', '&'.join(cookies), data['_id']])
+                        try:
+                            changes.append([data['remarks'] if 'remarks' in data.keys() else '未备注', '&'.join(cookies), data['_id']])
+                        except KeyError:
+                            changes.append([data['remarks'] if 'remarks' in data.keys() else '未备注', '&'.join(cookies), data['id']])
                 else:
                     cknum = datas.index(data) + 1
                     check = await checkCookie(cookie)
                     if check:
                         res += f"账号{cknum}-{check}有效\n"
-                        valids.append([data['_id'], data['remarks'] if 'remarks' in data.keys() else '未备注', cknum])
+                        try:
+                            valids.append([data['_id'], data['remarks'] if 'remarks' in data.keys() else '未备注', cknum])
+                        except KeyError:
+                            valids.append([data['id'], data['remarks'] if 'remarks' in data.keys() else '未备注', cknum])
                     else:
                         res += f"账号{cknum}已过期\n"
-                        expireds.append([data['_id'], cknum])
+                        try:
+                            expireds.append([data['_id'], cknum])
+                        except KeyError:
+                            expireds.append([data['id'], cknum])
                     msg = await jdbot.edit_message(msg, res)
                     await asyncio.sleep(1)
         else:
-            token = ql_token(AUTH_FILE)
+            token = await ql_token()
             headers = {'Authorization': f'Bearer {token}'}
-            url = 'http://127.0.0.1:5600/api/cookies'
+            url = 'http://127.0.0.1:5600/open/cookies'
             body = {'t': int(round(time.time() * 1000))}
             datas = requests.get(url, params=body, headers=headers).json()['data']
             valids = []
@@ -108,14 +116,20 @@ async def mycheckcookie(event):
                 check = await checkCookie(data['value'])
                 if check:
                     res += f"账号{cknum}-{check}有效\n"
-                    valids.append([data['_id'], data['nickname'], cknum])
+                    try:
+                        valids.append([data['_id'], data['nickname'], cknum])
+                    except KeyError:
+                        valids.append([data['id'], data['nickname'], cknum])
                 else:
                     res += f"账号{cknum}已过期\n"
-                    expireds.append([data['_id'], cknum])
+                    try:
+                        expireds.append([data['_id'], cknum])
+                    except KeyError:
+                        expireds.append([data['id'], cknum])
                 msg = await jdbot.edit_message(msg, res)
                 await asyncio.sleep(1)
         if V4:
-            configs = read("list")
+            configs = rwcon("list")
             for config in configs:
                 i = configs.index(config)
                 if config.find("TempBlockCookie") != -1 and config.find("##") == -1 and configs[i + 1].find(";") == -1:
@@ -127,16 +141,16 @@ async def mycheckcookie(event):
             n = " ".join('%s' % expired for expired in expireds)
             configs = re.sub(r'TempBlockCookie=".*"program', f'TempBlockCookie="{n}"', configs, re.M)
             text += f'【屏蔽情况】{o}TempBlockCookie="{n}"\n'
-            write(configs)
+            rwcon(configs)
             await jdbot.edit_message(msg, text)
         elif QL:
-            token = ql_token(AUTH_FILE)
+            token = await ql_token()
             headers = {'Authorization': f'Bearer {token}'}
             if expireds:
                 text += f'【禁用情况】\n'
                 for expired in expireds:
                     if QL8:
-                        url = 'http://127.0.0.1:5600/api/envs/disable'
+                        url = 'http://127.0.0.1:5600/open/envs/disable'
                         body = [f"{expired[0]}"]
                         r = requests.put(url, json=body, headers=headers)
                         if r.ok:
@@ -144,7 +158,7 @@ async def mycheckcookie(event):
                         else:
                             text += f'账号{expired[1]}：{o}禁用失败，请手动禁用\n'
                     else:
-                        url = 'http://127.0.0.1:5600/api/cookies/disable'
+                        url = 'http://127.0.0.1:5600/open/cookies/disable'
                         body = [f"{expired[0]}"]
                         r = requests.put(url, json=body, headers=headers)
                         if r.ok:
@@ -156,7 +170,7 @@ async def mycheckcookie(event):
                 text += f'【启用情况】\n'
                 for valid in valids:
                     if QL8:
-                        url = 'http://127.0.0.1:5600/api/envs/enable'
+                        url = 'http://127.0.0.1:5600/open/envs/enable'
                         body = [f"{valid[0]}"]
                         r = requests.put(url, json=body, headers=headers)
                         if r.ok:
@@ -164,7 +178,7 @@ async def mycheckcookie(event):
                         else:
                             text += f'账号{valid[2]} - {valid[1]}：{o}启用失败，请手动启用\n'
                     else:
-                        url = 'http://127.0.0.1:5600/api/cookies/enable'
+                        url = 'http://127.0.0.1:5600/open/cookies/enable'
                         body = [f"{valid[0]}"]
                         r = requests.put(url, json=body, headers=headers)
                         if r.ok:
@@ -175,13 +189,21 @@ async def mycheckcookie(event):
             if changes:
                 text += f'【更新情况】\n'
                 for change in changes:
-                    url = 'http://127.0.0.1:5600/api/envs'
-                    body = {
-                        "name": "JD_COOKIE",
-                        "remarks": change[0],
-                        "value": change[1],
-                        "_id": change[2]
-                    }
+                    url = 'http://127.0.0.1:5600/open/envs'
+                    if os.path.exists(QL_SQLITE_FILE):
+                        body = {
+                            "name": "JD_COOKIE",
+                            "remarks": change[0],
+                            "value": change[1],
+                            "id": change[2]
+                        }
+                    else:
+                        body = {
+                            "name": "JD_COOKIE",
+                            "remarks": change[0],
+                            "value": change[1],
+                            "_id": change[2]
+                        }
                     r = requests.put(url, json=body, headers=headers)
                     if r.ok:
                         removes = ' '.join(removes)
@@ -194,7 +216,8 @@ async def mycheckcookie(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")

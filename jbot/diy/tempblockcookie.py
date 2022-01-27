@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
-import json
 import os
 import re
-import sys
 import time
+import traceback
 from asyncio import exceptions
 
 import requests
-from telethon import events, Button
+from telethon import Button, events
 
-from .. import chat_id, jdbot, logger, TOKEN
-from ..bot.utils import press_event, V4, CONFIG_SH_FILE, row, split_list, AUTH_FILE, get_cks
-
-bot_id = int(TOKEN.split(":")[0])
+from .. import chat_id, jdbot, logger
+from ..bot.utils import CONFIG_SH_FILE, get_cks, press_event, ql_token, row, split_list, V4
 
 
 @jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/blockcookie'))
@@ -40,9 +36,11 @@ async def mytempblockcookie(event):
             await jdbot.send_message(chat_id, "非法输入！参考下面所给实例进行操作！\n/blockcookie 1（屏蔽账号1）")
     except Exception as e:
         title = "【💥错误💥】"
-        name = sys.argv[0].split("/")[-1].split(".")[0]
-        function = sys._getframe().f_code.co_name
-        await jdbot.send_message(chat_id, f"{title}\n\n文件名：{name}\n函数名：{function}\n错误原因：{str(e)}\n\n建议百度/谷歌查询")
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
 
 
@@ -84,7 +82,8 @@ async def v4_block(sender):
                     message = f"目前的屏蔽情况是：\n{str(' '.join('%s' % _ for _ in sorted(blocks, reverse=False))) if len(blocks) != 0 else '没有帐号被屏蔽'}"
                     return await operate(conv, sender, msg, message)
                 elif res == 'designated block':
-                    acounts = len(get_cks(CONFIG_SH_FILE))
+                    cookies = await get_cks()
+                    acounts = len(cookies)
                     if acounts == len(blocks):
                         message = "所有账号都已被屏蔽，无需继续屏蔽"
                         return await operate(conv, sender, msg, message)
@@ -153,9 +152,10 @@ async def v4_block(sender):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
         return False
 
@@ -179,14 +179,12 @@ async def ql_block(sender):
                 await jdbot.edit_message(msg, '对话已取消')
                 return False
             else:
-                with open(AUTH_FILE, 'r', encoding='utf-8') as f:
-                    auth = json.load(f)
-                token = auth['token']
+                token = await ql_token()
                 headers = {'Authorization': f'Bearer {token}'}
                 cookiedatas = []
                 try:
                     ql_version = '2.2'
-                    url = 'http://127.0.0.1:5600/api/cookies'
+                    url = 'http://127.0.0.1:5600/open/cookies'
                     body = {'t': int(round(time.time() * 1000))}
                     datas = requests.get(url, params=body, headers=headers).json()['data']
                     for data in datas:
@@ -194,18 +192,24 @@ async def ql_block(sender):
                         cookie = data['value']
                         remarks = data['nickname']
                         status = data['status']
-                        _id = data['_id']
+                        try:
+                            _id = data['_id']
+                        except KeyError:
+                            _id = data['id']
                         cookiedatas.append([cknum, cookie, remarks, status, _id])
                 except:
                     ql_version = '2.8+'
-                    url = 'http://127.0.0.1:5600/api/envs'
+                    url = 'http://127.0.0.1:5600/open/envs'
                     body = {
                         'searchValue': 'JD_COOKIE',
                         'Authorization': f'Bearer {token}'
                     }
                     datas = requests.get(url, params=body, headers=headers).json()['data']
                     for data in datas:
-                        cookiedatas.append([datas.index(data) + 1, data['value'], data['remarks'] if 'remarks' in data.keys() else "未备注", '启用' if data['status'] == 0 else '禁用', data['_id']])
+                        try:
+                            cookiedatas.append([datas.index(data) + 1, data['value'], data['remarks'] if 'remarks' in data.keys() else "未备注", '启用' if data['status'] == 0 else '禁用', data['_id']])
+                        except KeyError:
+                            cookiedatas.append([datas.index(data) + 1, data['value'], data['remarks'] if 'remarks' in data.keys() else "未备注", '启用' if data['status'] == 0 else '禁用', data['id']])
                 if res == 'query start and stop status':
                     message = "目前启停状态\n\n"
                     for cookiedata in cookiedatas:
@@ -241,9 +245,9 @@ async def ql_block(sender):
                     else:
                         if "disable" in res:
                             if ql_version == '2.2':
-                                url = 'http://127.0.0.1:5600/api/cookies/disable'
+                                url = 'http://127.0.0.1:5600/open/cookies/disable'
                             else:
-                                url = 'http://127.0.0.1:5600/api/envs/disable'
+                                url = 'http://127.0.0.1:5600/open/envs/disable'
                             body = [f"{res_2}"]
                             r = requests.put(url, json=body, headers=headers)
                             if r.ok:
@@ -252,9 +256,9 @@ async def ql_block(sender):
                                 return await operate(conv, sender, msg, '禁用失败，请手动禁用')
                         else:
                             if ql_version == '2.2':
-                                url = 'http://127.0.0.1:5600/api/cookies/enable'
+                                url = 'http://127.0.0.1:5600/open/cookies/enable'
                             else:
-                                url = 'http://127.0.0.1:5600/api/envs/enable'
+                                url = 'http://127.0.0.1:5600/open/envs/enable'
                             body = [f"{res_2}"]
                             r = requests.put(url, json=body, headers=headers)
                             if r.ok:
@@ -277,14 +281,14 @@ async def ql_block(sender):
                             return await operate(conv, sender, msg, '没有账号被禁用，无需启用全部账号')
                     if "disable" in res:
                         if ql_version == '2.2':
-                            url = 'http://127.0.0.1:5600/api/cookies/disable'
+                            url = 'http://127.0.0.1:5600/open/cookies/disable'
                         else:
-                            url = 'http://127.0.0.1:5600/api/envs/disable'
+                            url = 'http://127.0.0.1:5600/open/envs/disable'
                     else:
                         if ql_version == '2.2':
-                            url = 'http://127.0.0.1:5600/api/cookies/enable'
+                            url = 'http://127.0.0.1:5600/open/cookies/enable'
                         else:
-                            url = 'http://127.0.0.1:5600/api/envs/enable'
+                            url = 'http://127.0.0.1:5600/open/envs/enable'
                     message = ""
                     if "disable" in res:
                         for _id in _ids:
@@ -309,9 +313,10 @@ async def ql_block(sender):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
         return False
 
@@ -347,35 +352,39 @@ async def v4_appoint(ck_num):
 
 async def ql_appoint(ck_num):
     msg = await jdbot.send_message(chat_id, f"开始屏蔽账号{ck_num}")
-    with open(AUTH_FILE, 'r', encoding='utf-8') as f:
-        auth = json.load(f)
-    token = auth['token']
+    token = await ql_token()
     headers = {'Authorization': f'Bearer {token}'}
     cookiedatas = []
     try:
         ql_version = '2.2'
-        url = 'http://127.0.0.1:5600/api/cookies'
+        url = 'http://127.0.0.1:5600/open/cookies'
         body = {'t': int(round(time.time() * 1000))}
         datas = requests.get(url, params=body, headers=headers).json()['data']
         for data in datas:
-            cookiedatas.append([datas.index(data) + 1, data['_id']])
+            try:
+                cookiedatas.append([datas.index(data) + 1, data['_id']])
+            except KeyError:
+                cookiedatas.append([datas.index(data) + 1, data['id']])
     except:
         ql_version = '2.8+'
-        url = 'http://127.0.0.1:5600/api/envs'
+        url = 'http://127.0.0.1:5600/open/envs'
         body = {
             'searchValue': 'JD_COOKIE',
             'Authorization': f'Bearer {token}'
         }
         datas = requests.get(url, params=body, headers=headers).json()['data']
         for data in datas:
-            cookiedatas.append([datas.index(data) + 1, data['_id']])
+            try:
+                cookiedatas.append([datas.index(data) + 1, data['_id']])
+            except KeyError:
+                cookiedatas.append([datas.index(data) + 1, data['id']])
     if len(cookiedatas) < int(ck_num):
         await jdbot.edit_message(msg, f"无法找到账号{ck_num}的信息，禁用失败")
         return
     if ql_version == '2.2':
-        url = 'http://127.0.0.1:5600/api/cookies/disable'
+        url = 'http://127.0.0.1:5600/open/cookies/disable'
     else:
-        url = 'http://127.0.0.1:5600/api/envs/disable'
+        url = 'http://127.0.0.1:5600/open/envs/disable'
     body = [f"{cookiedatas[int(ck_num) - 1][1]}"]
     r = requests.put(url, json=body, headers=headers)
     if r.ok:

@@ -1,14 +1,15 @@
-import requests
 import datetime
-import time
 import json
+import time
 from datetime import timedelta
 from datetime import timezone
-from .utils import CONFIG_SH_FILE, get_cks, AUTH_FILE, QL,logger
-SHA_TZ = timezone(
-    timedelta(hours=8),
-    name='Asia/Shanghai',
-)
+
+import requests
+
+from .utils import AUTH_FILE, CONFIG_SH_FILE, get_cks, logger, QL
+
+SHA_TZ = timezone(timedelta(hours=8), name='Asia/Shanghai')
+
 requests.adapters.DEFAULT_RETRIES = 5
 session = requests.session()
 session.keep_alive = False
@@ -57,25 +58,21 @@ def get_beans_7days(ck):
         }
         days = []
         for i in range(0, 7):
-            days.append(
-                (datetime.date.today() - datetime.timedelta(days=i)).strftime("%Y-%m-%d"))
+            days.append((datetime.date.today() - datetime.timedelta(days=i)).strftime("%Y-%m-%d"))
         beans_in = {key: 0 for key in days}
         beans_out = {key: 0 for key in days}
         while day_7:
-            page = page + 1
-            resp = session.get(url, params=gen_params(page),
-                               headers=headers, timeout=100).text
+            page += 1
+            resp = session.get(url, params=gen_params(page), headers=headers, timeout=100).text
             res = json.loads(resp)
             if res['resultCode'] == 0:
                 for i in res['data']['list']:
                     for date in days:
                         if str(date) in i['createDate'] and i['amount'] > 0:
-                            beans_in[str(date)] = beans_in[str(
-                                date)] + i['amount']
+                            beans_in[str(date)] = beans_in[str(date)] + i['amount']
                             break
                         elif str(date) in i['createDate'] and i['amount'] < 0:
-                            beans_out[str(date)] = beans_out[str(
-                                date)] + i['amount']
+                            beans_out[str(date)] = beans_out[str(date)] + i['amount']
                             break
                     if i['createDate'].split(' ')[0] not in str(days):
                         day_7 = False
@@ -105,25 +102,20 @@ def get_total_beans(ck):
     except Exception as e:
         logger.error(str(e))
 
-def get_bean_data(i):
+
+def get_bean_data(i, cookies):
     try:
-        if QL:
-            ckfile = AUTH_FILE
-        else:
-            ckfile = CONFIG_SH_FILE
-        cookies = get_cks(ckfile)
         if cookies:
-            ck = cookies[i-1]
+            ck = cookies[i - 1]
             beans_res = get_beans_7days(ck)
             beantotal = get_total_beans(ck)
             if beans_res['code'] != 200:
                 return beans_res
             else:
                 beans_in, beans_out = [], []
-                beanstotal = [int(beantotal), ]
+                beanstotal = [int(beantotal)]
                 for i in beans_res['data'][0]:
-                    beantotal = int(
-                        beantotal) - int(beans_res['data'][0][i]) - int(beans_res['data'][1][i])
+                    beantotal = int(beantotal) - int(beans_res['data'][0][i]) - int(beans_res['data'][1][i])
                     beans_in.append(int(beans_res['data'][0][i]))
                     beans_out.append(int(str(beans_res['data'][1][i]).replace('-', '')))
                     beanstotal.append(beantotal)

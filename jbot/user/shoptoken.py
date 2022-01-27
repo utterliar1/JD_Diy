@@ -8,12 +8,9 @@ import traceback
 
 from telethon import events
 
-from .login import user
-from .. import chat_id, jdbot, logger
-from ..bot.utils import V4
-from ..diy.utils import rwcon, shoptokenIds
-
-client = user
+from .. import chat_id, client, jdbot, logger
+from ..bot.utils import rwcon, V4
+from ..diy.utils import shoptokenIds
 
 
 @client.on(events.NewMessage(chats=shoptokenIds, pattern=r'(export\s)?MyShopToken\d*=(".*"|\'.*\')'))
@@ -54,7 +51,7 @@ async def shoptoken(event):
                 await jdbot.edit_message(msg, "获取到店铺签到，已满20个店铺变量，不进行新增...")
             elif len(config) == 0:
                 configs = re.sub('export MyShopToken1=""', f'export MyShopToken1="{value}"', configs)
-                info = f"新增店铺签到完成，当前店铺数量:{len(config)+1}\n"
+                info = f"新增店铺签到完成，当前店铺数量:{len(config) + 1}\n"
                 end = f'```{name}="{value}"```'
                 await jdbot.edit_message(msg, info + end)
             else:
@@ -97,7 +94,7 @@ async def shoptoken(event):
                     continue
                 if int(day[1]) >= int(day[0]):
                     chart += re.findall(f"【店铺(\d+)】", check[n])
-            charts = sorted(chart,key=int)
+            charts = sorted(chart, key=int)
             p = -1
             for _ in charts:
                 p += 1

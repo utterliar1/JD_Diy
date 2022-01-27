@@ -1,12 +1,13 @@
 from telethon import events, Button
 import os
 import shutil
+import traceback
 from asyncio import exceptions
 from .. import jdbot, chat_id, JD_DIR, BOT_SET, ch_name
 from .utils import split_list, logger, press_event
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern='/edit'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern='/edit'))
 async def my_edit(event):
     """定义编辑文件操作"""
     logger.info(f'即将执行{event.raw_text}命令')
@@ -26,7 +27,13 @@ async def my_edit(event):
                 filelist = split_list(lines, 15)
                 path = text
         except Exception as e:
-            await jdbot.send_message(chat_id, f'something wrong,I\'m sorry\n{str(e)}')
+            title = "【💥错误💥】"
+            name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+            function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+            details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+            tip = '建议百度/谷歌进行查询'
+            await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+            logger.error(f"错误--->{str(e)}")
     elif text and os.path.isdir(text):
         path = text
         filelist = None
@@ -42,16 +49,24 @@ async def my_edit(event):
 
 
 if ch_name:
-    jdbot.add_event_handler(my_edit, events.NewMessage(
-        from_users=chat_id, pattern=BOT_SET['命令别名']['edit']))
+    jdbot.add_event_handler(my_edit, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['edit']))
 
 
 async def edit_file(conv, SENDER, path, msg, page, filelist):
-    mybtn = [Button.inline('上一页', data='up'), Button.inline('下一页', data='next'), Button.inline(
-        '上级', data='updir'), Button.inline('取消', data='cancel')]
-    mybtn2 = [[Button.inline('上一页', data='up'), Button.inline(
-        '下一页', data='next'), Button.inline('取消', data='cancel')], [Button.inline('上十页', data='up10'), Button.inline(
-        '下十页', data='next10'), Button.inline('编辑', data='edit')]]
+    mybtn = [
+        Button.inline('上一页', data='up'),
+        Button.inline('下一页', data='next'),
+        Button.inline('上级', data='updir'),
+        Button.inline('取消', data='cancel')
+    ]
+    mybtn2 = [
+        [Button.inline('上一页', data='up'),
+         Button.inline('下一页', data='next'),
+         Button.inline('取消', data='cancel')],
+        [Button.inline('上十页', data='up10'),
+         Button.inline('下十页', data='next10'),
+         Button.inline('编辑', data='edit')]
+    ]
     try:
         if filelist and type(filelist[0][0]) == str:
             markup = filelist
@@ -66,8 +81,7 @@ async def edit_file(conv, SENDER, path, msg, page, filelist):
             else:
                 dir = os.listdir(path)
                 dir.sort()
-                markup = [Button.inline(file, data=str(
-                    file)) for file in dir]
+                markup = [Button.inline(file, data=str(file)) for file in dir]
                 markup = split_list(markup, int(BOT_SET['每页列数']))
                 if len(markup) > 30:
                     markup = split_list(markup, 30)
@@ -78,8 +92,7 @@ async def edit_file(conv, SENDER, path, msg, page, filelist):
                     if path == JD_DIR:
                         newmarkup.append([Button.inline('取消', data='cancel')])
                     else:
-                        newmarkup.append(
-                            [Button.inline('上级', data='updir'), Button.inline('取消', data='cancel')])
+                        newmarkup.append([Button.inline('上级', data='updir'), Button.inline('取消', data='cancel')])
             msg = await jdbot.edit_message(msg, '请做出您的选择：', buttons=newmarkup)
         convdata = await conv.wait_event(press_event(SENDER))
         res = bytes.decode(convdata.data)
@@ -88,22 +101,22 @@ async def edit_file(conv, SENDER, path, msg, page, filelist):
             conv.cancel()
             return None, None, None, None
         elif res == 'next':
-            page = page + 1
+            page += 1
             if page > len(markup) - 1:
                 page = 0
             return path, msg, page, markup
         elif res == 'up':
-            page = page - 1
+            page -= 1
             if page < 0:
                 page = len(markup) - 1
             return path, msg, page, markup
         elif res == 'next10':
-            page = page + 10
+            page += 10
             if page > len(markup) - 1:
                 page = 0
             return path, msg, page, markup
         elif res == 'up10':
-            page = page - 10
+            page -= 10
             if page < 0:
                 page = len(markup) - 1
             return path, msg, page, markup
@@ -124,7 +137,7 @@ async def edit_file(conv, SENDER, path, msg, page, filelist):
                 return
             markup[page] = resp.raw_text.split('\n')
             for a in range(len(markup[page])):
-                markup[page][a] = markup[page][a] + '\n'
+                markup[page][a] += '\n'
             shutil.copy(path, f'{path}.bak')
             with open(path, 'w+', encoding='utf-8') as f:
                 markup = ["".join(a) for a in markup]
@@ -142,9 +155,14 @@ async def edit_file(conv, SENDER, path, msg, page, filelist):
         else:
             return f'{path}/{res}', msg, page, None
     except exceptions.TimeoutError:
-        msg = await jdbot.edit_message(msg, '选择已超时，本次对话已停止')
+        await jdbot.edit_message(msg, '选择已超时，本次对话已停止')
         return None, None, None, None
     except Exception as e:
-        msg = await jdbot.edit_message(msg, f'something wrong,I\'m sorry\n{str(e)}')
-        logger.error(f'something wrong,I\'m sorry\n{str(e)}')
+        title = "【💥错误💥】"
+        name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
+        tip = '建议百度/谷歌进行查询'
+        await jdbot.edit_message(msg, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
+        logger.error(f"错误--->{str(e)}")
         return None, None, None, None

@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import os
 import re
 import traceback
 
 from telethon import events
 
-from .login import user
-from .utils import execute
-from .. import chat_id, jdbot, logger, TOKEN
-from ..bot.utils import TASK_CMD
+from .. import chat_id, client, jdbot, logger, OWN_DIR
+from ..bot.utils import execute, TASK_CMD
 from ..diy.utils import myzdjr_chatIds
-
-bot_id = int(TOKEN.split(":")[0])
-client = user
 
 
 @client.on(events.NewMessage(chats=myzdjr_chatIds, pattern=r'export\s(jd_zdjr_activity|jd_joinTeam_activity|FAV|OPEN_CARD|addCart|luckDraw).*=(".*"|\'.*\')'))
@@ -28,9 +22,7 @@ async def activity(event):
         group = f'[{event.chat.title}](https://t.me/c/{event.chat.id}/{event.message.id})'
         if "jd_zdjr_activity" in event.message.text:
             name = '组队瓜分京豆'
-            from ..diy.diy import smiek_jd_zdjr
-            await smiek_jd_zdjr()
-            cmd = f'{TASK_CMD} /jd/own/smiek_jd_zdjr.js now'
+            cmd = f'{TASK_CMD} {OWN_DIR}/smiek_jd_zdjr.js now'
         else:
             return
         messages = event.message.raw_text.split("\n")
@@ -63,4 +55,3 @@ async def activity(event):
         tip = '建议百度/谷歌进行查询'
         await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-        

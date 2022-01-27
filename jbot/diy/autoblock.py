@@ -4,19 +4,17 @@
 
 import os
 import re
-import sys
+import traceback
 
 import requests
 from telethon import events
 
-from .. import chat_id, jdbot, logger, TOKEN
-from ..bot.utils import V4, AUTH_FILE
-from ..diy.utils import QL8, ql_token, rwcon
-
-bot_id = int(TOKEN.split(":")[0])
+from .. import bot_id, chat_id, jdbot, logger
+from ..bot.utils import ql_token, rwcon, V4
+from ..diy.utils import QL8
 
 
-@jdbot.on(events.NewMessage(from_users=bot_id, pattern=r'.*cookie已失效.*'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=bot_id, pattern=r'.*cookie已失效.*'))
 async def block(event):
     try:
         message = event.message.text.replace("\n", "")
@@ -59,32 +57,39 @@ async def block(event):
                 rwcon(configs)
                 await jdbot.edit_message(msg, f"pin为{pt_pin}的账号屏蔽成功！")
         elif QL8:
-            token = ql_token(AUTH_FILE)
-            url = 'http://127.0.0.1:5600/api/envs'
+            token = await ql_token()
+            url = 'http://127.0.0.1:5600/open/envs'
             headers = {'Authorization': f'Bearer {token}'}
             body = {"searchValue": f";pt_pin={pt_pin};"}
             datas = requests.get(url, headers=headers, json=body).json()['data']
             for data in datas:
                 if pt_pin in data['value'] and "pt_key" in data['value']:
-                    url = 'http://127.0.0.1:5600/api/envs/disable'
-                    requests.put(url, headers=headers, json=[data['_id']])
+                    url = 'http://127.0.0.1:5600/open/envs/disable'
+                    try:
+                        requests.put(url, headers=headers, json=[data['_id']])
+                    except KeyError:
+                        requests.put(url, headers=headers, json=[data['id']])
                     await jdbot.edit_message(msg, f"pin为{pt_pin}的账号屏蔽成功！")
                     break
         else:
-            token = ql_token(AUTH_FILE)
-            url = 'http://127.0.0.1:5600/api/cookies'
+            token = await ql_token()
+            url = 'http://127.0.0.1:5600/open/cookies'
             headers = {'Authorization': f'Bearer {token}'}
             datas = requests.get(url, headers=headers).json()['data']
             for data in datas:
                 if pt_pin in data['value'] and "pt_key" in data['value']:
-                    url = 'http://127.0.0.1:5600/api/cookies/disable'
-                    requests.put(url, headers=headers, json=[data['_id']])
+                    url = 'http://127.0.0.1:5600/open/cookies/disable'
+                    try:
+                        requests.put(url, headers=headers, json=[data['_id']])
+                    except KeyError:
+                        requests.put(url, headers=headers, json=[data['id']])
                     await jdbot.edit_message(msg, f"pin为{pt_pin}的账号屏蔽成功！")
                     break
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")

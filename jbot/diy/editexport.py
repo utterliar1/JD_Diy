@@ -5,21 +5,20 @@
 import asyncio
 import os
 import re
-import sys
+import traceback
 from asyncio import exceptions
 
-from telethon import events, Button
+from telethon import Button, events
 
-from .. import chat_id, jdbot, logger, ch_name, BOT_SET
-from ..bot.utils import press_event, V4, QL, split_list, row
-from ..diy.utils import read, write
+from .. import chat_id, jdbot, logger
+from ..bot.utils import press_event, QL, row, rwcon, split_list, V4
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/export$'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/export$'))
 async def mychangeexport(event):
     try:
         SENDER = event.sender_id
-        configs = read("list")
+        configs = rwcon("list")
         knames, vnames, notes, btns = [], [], [], []
         if V4:
             for config in configs:
@@ -116,9 +115,9 @@ async def mychangeexport(event):
                         msg = await jdbot.edit_message(msg, f'好的，请稍等\n你设置变量为：{kname}="{vname}"')
                         loop = False
                         conv.cancel()
-                configs = read("str")
-                configs = re.sub(f'{kname}=(\"|\').*(\"|\')', f'{kname}="{vname}"', configs)
-                write(configs)
+                configs = rwcon("str")
+                configs = re.sub(f'{kname}=[\"\'].*[\"\']', f'{kname}="{vname}"', configs)
+                rwcon(configs)
                 await asyncio.sleep(1.5)
                 await jdbot.delete_messages(chat_id, msg)
                 await jdbot.send_message(chat_id, "修改环境变量成功")
@@ -131,9 +130,9 @@ async def mychangeexport(event):
                     await jdbot.edit_message(msg, '对话已取消，感谢你的使用')
                     conv.cancel()
                     return
-                configs = read("str")
+                configs = rwcon("str")
                 configs = re.sub(f'(?:^|\n?)export {keydata}=[\'|\"].*[\'|\"].*\n?', "\n", configs)
-                write(configs)
+                rwcon(configs)
                 await asyncio.sleep(0.5)
                 await jdbot.delete_messages(chat_id, msg)
                 await jdbot.send_message(chat_id, "删除环境变量成功")
@@ -143,11 +142,8 @@ async def mychangeexport(event):
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
-        function = "函数名：" + sys._getframe().f_code.co_name
+        function = "函数名：" + e.__traceback__.tb_frame.f_code.co_name
+        details = "错误详情：第 " + str(e.__traceback__.tb_lineno) + " 行"
         tip = '建议百度/谷歌进行查询'
-        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n\n{tip}")
+        await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
-
-
-if ch_name:
-    jdbot.add_event_handler(mychangeexport, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['cron']))
