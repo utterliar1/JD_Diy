@@ -9,7 +9,7 @@ from requests import get, post, put
 from telethon import Button, events
 
 from .. import chat_id, CONFIG_DIR, jdbot, logger
-from ..bot.utils import execute, press_event, ql_token, row, rwcon, split_list, V4
+from ..bot.utils import press_event, ql_token, row, rwcon, split_list, V4
 from ..diy.utils import QL2, wskey
 
 
@@ -148,18 +148,27 @@ async def myaddwskey(event):
                     text += f"新增wskey成功！pin为：{pt_pin}\n"
                 msg = await jdbot.edit_message(msg, text)
         if len(text) > 1:
-            if os.path.exists("/jd/own/wskey_ptkey.py"):
+            if os.path.exists("/jd/own/wskey_ptkey-cece59f8.pyc"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await execute(chat_id, None, "python /jd/own/wskey_ptkey.py")
+                os.system("python /jd/own/wskey_ptkey-cece59f8.pyc")
+            elif os.path.exists("/jd/scripts/wskey_ptkey-cece59f8.pyc"):
+                text += "\n将自动更新cookie列表，自行查看更新情况"
+                os.system("python /jd/scripts/wskey_ptkey-cece59f8.pyc")
+            elif os.path.exists("/ql/scripts/wskey_ptkey-cece59f8.pyc"):
+                text += "\n将自动更新cookie列表，自行查看更新情况"
+                os.system("task /ql/scripts/wskey_ptkey-cece59f8.pyc")
+            elif os.path.exists("/jd/own/wskey_ptkey.py"):
+                text += "\n将自动更新cookie列表，自行查看更新情况"
+                os.system("python /jd/own/wskey_ptkey.py")
             elif os.path.exists("/jd/scripts/wskey_ptkey.py"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await execute(chat_id, None, "python /jd/scripts/wskey_ptkey.py")
+                os.system("python /jd/scripts/wskey_ptkey.py")
             elif os.path.exists("/ql/scripts/wskey_ptkey.py"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await execute(chat_id, None, "task /ql/scripts/wskey_ptkey.py")
+                os.system("task /ql/scripts/wskey_ptkey.py")
             elif os.path.exists("/ql/scripts/ql_pandaAPI_refreshCK.py") and not os.path.exists("/ql/db/wskey.list"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
-                await execute(chat_id, None, "task /ql/scripts/ql_pandaAPI_refreshCK.py")
+                os.system("task /ql/scripts/ql_pandaAPI_refreshCK.py")
             elif os.path.exists("/ql/raw/ql_pandaAPI_refreshCK.py") and not os.path.exists("/ql/db/wskey.list"):
                 text += "\n将自动更新cookie列表，自行查看更新情况"
             elif os.path.exists("/ql/scripts/ql_pandaAPI_refreshCK.py") and os.path.exists("/ql/db/wskey.list"):
