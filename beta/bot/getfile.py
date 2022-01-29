@@ -99,7 +99,7 @@ async def bot_get_file(event):
                     await jdbot.edit_message(msg, f'{filename}已保存到{res1}文件夹')
             conversation.cancel()
         if cmdtext:
-            await execute(chat_id, None, cmdtext)
+            await execute(chat_id, '', cmdtext)
     except asyncio.TimeoutError:
         await jdbot.edit_message(msg, '选择已超时，对话已停止')
     except Exception as e:
