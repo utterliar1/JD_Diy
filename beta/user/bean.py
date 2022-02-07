@@ -13,22 +13,22 @@ from .. import BOT_DIR, bot_id, BOT_SET, ch_name, chat_id, client, jdbot, LOG_DI
 FONT_FILE = f'{BOT_DIR}/font/jet.ttf'
 
 
-@client.on(events.NewMessage(from_users=chat_id, pattern=r'^/bean|^-b\s?(([ioa](\d+-+\d+|\d+)?)?|\d*)$'))
+@client.on(events.NewMessage(from_users=chat_id, pattern=r'^/bean|^-b\s?(([ioa]\s?(\d+-+\d+|\d+)?)?|\d*)$'))
 async def bot_bean(event):
     message = event.raw_text
     if "-b" in message:
         if 'i' in message:
-            a = re.findall('(\d+.*)', message)
-            a = f' {a[0]}' if a else ''
-            message = f'/bean in{a}'
+            num = re.findall('(\d+.*)', message)
+            num = f' {num[0]}' if num else ''
+            message = f'/bean in{num}'
         elif 'o' in message:
-            a = re.findall('(\d+.*)', message)
-            a = f' {a[0]}' if a else ''
-            message = f'/bean out{a}'
+            num = re.findall('(\d+.*)', message)
+            num = f' {num[0]}' if num else ''
+            message = f'/bean out{num}'
         elif 'a' in message:
-            a = re.findall('(\d+.*)', message)
-            a = f' {a[0]}' if a else ''
-            message = f'/bean all{a}'
+            num = re.findall('(\d+.*)', message)
+            num = f' {num[0]}' if num else ''
+            message = f'/bean all{num}'
         elif re.search(f'\d', message):
             num = re.findall("\d+", message)[0]
             message = f'/bean {num}'
