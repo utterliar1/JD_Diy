@@ -13,7 +13,7 @@ from .. import chat_id, jdbot, logger, client
 from ..diy.utils import my_chat_id
 
 
-## 疫情查询
+## 天气查询
 @client.on(events.NewMessage(chats=[-1001235868507, my_chat_id], pattern=r'.*天气$'))
 async def tianqi(event):
     try:
