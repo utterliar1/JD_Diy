@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
+import asyncio
 import os
 import traceback
-from asyncio import sleep
 
 from telethon import events
 
-from .. import chat_id, client, jdbot, logger
+from jbot import chat_id, jdbot, logger
+from jbot.user.login import client
 
 
-@client.on(events.NewMessage(from_users=chat_id, pattern=r"^user(\?|？)$"))
-async def user(event):
+@client.on(events.NewMessage(from_users=chat_id, pattern=r"^user(\?|\？)$"))
+async def testuser(event):
     try:
         await event.edit(r'`监控已正常启动！`')
-        await sleep(5)
+        await asyncio.sleep(5)
         await event.delete()
     except Exception as e:
         title = "【💥错误💥】"

@@ -1,14 +1,17 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import traceback
 
 from telethon import events
 
-from .utils import log_btn
-from .. import BOT_SET, ch_name, chat_id, JD_DIR, jdbot, LOG_DIR, logger
+from jbot import BOT_SET, ch_name, chat_id, jdbot, LOG_DIR, logger, QL_DATA_DIR
+from jbot.bot.utils import send_file
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/log$'))
-async def bot_log(event):
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/log$'))
+async def script_log(event):
     """定义日志文件操作"""
     try:
         SENDER = event.sender_id
@@ -18,7 +21,7 @@ async def bot_log(event):
         async with jdbot.conversation(SENDER, timeout=60) as conv:
             msg = await conv.send_message('正在查询，请稍后')
             while path:
-                path, msg, page, filelist = await log_btn(conv, SENDER, path, msg, page, filelist)
+                path, msg, page, filelist = await send_file(conv, SENDER, path, msg, page, filelist)
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
@@ -49,7 +52,7 @@ async def bot_getfile(event):
     """定义获取文件命令"""
     try:
         SENDER = event.sender_id
-        path = JD_DIR
+        path = QL_DATA_DIR
         page = 0
         msg_text = event.raw_text.split(' ')
         if len(msg_text) == 2:
@@ -70,7 +73,7 @@ async def bot_getfile(event):
         async with jdbot.conversation(SENDER, timeout=60) as conv:
             msg = await conv.send_message('正在查询，请稍后')
             while path:
-                path, msg, page, filelist = await log_btn(conv, SENDER, path, msg, page, filelist)
+                path, msg, page, filelist = await send_file(conv, SENDER, path, msg, page, filelist)
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
@@ -82,6 +85,6 @@ async def bot_getfile(event):
 
 
 if ch_name:
-    jdbot.add_event_handler(bot_getfile, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['getfile']))
-    jdbot.add_event_handler(bot_log, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['log']))
+    jdbot.add_event_handler(script_log, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['log']))
     jdbot.add_event_handler(getbotlog, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['botlog']))
+    jdbot.add_event_handler(bot_getfile, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['getfile']))

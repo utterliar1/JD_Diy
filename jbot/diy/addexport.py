@@ -9,11 +9,11 @@ from asyncio import exceptions
 
 from telethon import Button, events
 
-from .. import chat_id, jdbot, logger
-from ..bot.utils import press_event, rwcon, V4
+from jbot import chat_id, jdbot, logger
+from jbot.bot.utils import press_event, rwcon
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'(export\s)?\w*=(".*"|\'.*\')'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'(export\s)?\w*=(".*"|\'.*\')'))
 async def myaddexport(event):
     try:
         SENDER = event.sender_id
@@ -55,17 +55,8 @@ async def myaddexport(event):
                         note = await conv.get_response()
                         note = f" # {note.raw_text}"
                     conv.cancel()
-                if V4:
-                    configs = rwcon("list")
-                    for config in configs:
-                        if "第五区域" in config and "↑" in config:
-                            end_line = configs.index(config)
-                            break
-                    configs.insert(end_line - 1, f'export {kname}="{vname}"{note}\n')
-                    configs = ''.join(configs)
-                else:
-                    configs = rwcon("str")
-                    configs += f'\nexport {kname}="{vname}"{note}'
+                configs = rwcon("str")
+                configs += f'\nexport {kname}="{vname}"{note}'
                 await asyncio.sleep(1.5)
                 end = "新增环境变量成功"
             rwcon(configs)

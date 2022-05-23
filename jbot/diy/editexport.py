@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import asyncio
 import os
 import re
@@ -10,8 +9,8 @@ from asyncio import exceptions
 
 from telethon import Button, events
 
-from .. import chat_id, jdbot, logger
-from ..bot.utils import press_event, QL, row, rwcon, split_list, V4
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger, row
+from jbot.bot.utils import press_event, rwcon, split_list
 
 
 @jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/export$'))
@@ -20,46 +19,23 @@ async def mychangeexport(event):
         SENDER = event.sender_id
         configs = rwcon("list")
         knames, vnames, notes, btns = [], [], [], []
-        if V4:
-            for config in configs:
-                if "第五区域" in config and "↓" in config:
-                    start_line = configs.index(config) + 1
-                elif "第五区域" in config and "↑" in config:
-                    end_line = configs.index(config)
-                    break
-            for config in configs[start_line:end_line]:
-                if "export" in config and "##" not in config:
-                    kv = config.replace("export ", "")
-                    kname = kv.split("=")[0]
-                    try:
-                        vname = re.findall(r"[^\"']+(?=\"|')", kv)[1]
-                    except:
-                        vname = '你没有设置任何值'
-                    if " # " in kv:
-                        note = re.findall(r"(?<=#\s).*", kv)[0]
-                    else:
-                        note = 'none'
-                    knames.append(kname), vnames.append(vname), notes.append(note)
-                elif "↓" in config:
-                    break
-        elif QL:
-            for config in configs:
-                if "## 其他需要的变量" in config:
-                    line = configs.index(config)
-                    break
-            for config in configs[line:]:
-                if "export" in config:
-                    kv = config.replace("export ", "")
-                    kname = kv.split("=")[0]
-                    try:
-                        vname = re.findall(r"[^\"']+(?=\"|')", kv)[1]
-                    except:
-                        vname = '你没有设置任何值'
-                    if " # " in kv:
-                        note = re.findall(r"(?<=#\s).*", kv)[0]
-                    else:
-                        note = 'none'
-                    knames.append(kname), vnames.append(vname), notes.append(note)
+        for config in configs:
+            if "## 其他需要的变量" in config:
+                line = configs.index(config)
+                break
+        for config in configs[line:]:
+            if "export" in config:
+                kv = config.replace("export ", "")
+                kname = kv.split("=")[0]
+                try:
+                    vname = re.findall(r"[^\"']+(?=\"|')", kv)[1]
+                except:
+                    vname = '你没有设置任何值'
+                if " # " in kv:
+                    note = re.findall(r"(?<=#\s).*", kv)[0]
+                else:
+                    note = 'none'
+                knames.append(kname), vnames.append(vname), notes.append(note)
         for i in range(len(knames)):
             if notes[i] != 'none':
                 btn = Button.inline(notes[i], data=knames[i])
@@ -147,3 +123,7 @@ async def mychangeexport(event):
         tip = '建议百度/谷歌进行查询'
         await jdbot.send_message(chat_id, f"{title}\n\n{name}\n{function}\n错误原因：{str(e)}\n{details}\n{traceback.format_exc()}\n{tip}")
         logger.error(f"错误--->{str(e)}")
+
+
+if ch_name:
+    jdbot.add_event_handler(mychangeexport, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['export']))

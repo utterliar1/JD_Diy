@@ -1,9 +1,11 @@
-"""A python client for quickchart.io, a web service that generates static
-charts."""
+# -*- coding: utf-8 -*-
+
+"""用于quickchart.io的python客户端，一种生成静态图表的web服务。"""
 
 import datetime
 import json
 import re
+
 try:
     from urllib import urlencode
 except:

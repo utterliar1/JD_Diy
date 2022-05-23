@@ -1,11 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import traceback
 from asyncio import exceptions
 
 from telethon import Button, events
 
-from .utils import execute, press_event, split_list
-from .. import BOT_SET, ch_name, chat_id, jdbot, logger, SHORTCUT_FILE
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger, SHORTCUT_FILE
+from jbot.bot.utils import execute, press_event, split_list
 
 
 @jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/a$'))
@@ -16,7 +19,7 @@ async def my_a(event):
         shortcuts = f.readlines()
     try:
         cmdtext = None
-        async with jdbot.conversation(SENDER, timeout=60) as conv:
+        async with jdbot.conversation(SENDER, timeout=180) as conv:
             markup = [Button.inline(shortcut.split('-->')[0], data=str(shortcut.split('-->')[-1])) for shortcut in shortcuts if '-->' in shortcut]
             markup = split_list(markup, 3)
             markup.append([Button.inline('取消', data='cancel')])
@@ -81,3 +84,4 @@ async def my_clear(event):
 if ch_name:
     jdbot.add_event_handler(my_a, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['a']))
     jdbot.add_event_handler(my_b, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['b']))
+    jdbot.add_event_handler(my_clear, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['clearboard']))

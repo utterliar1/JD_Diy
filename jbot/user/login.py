@@ -1,30 +1,19 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import asyncio
 import json
 import os
 import re
 
-import qrcode
 from telethon import Button, events
 
-from .. import BOT_SET, BOT_SET_JSON_FILE_USER, ch_name, chat_id, client, CONFIG_DIR, jdbot, QR_IMG_FILE
-from ..bot.utils import press_event, row, split_list
-
-
-def creat_qr(text):
-    """实例化QRCode生成qr对象"""
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
-    qr.clear()
-    # 传入数据
-    qr.add_data(text)
-    qr.make(fit=True)
-    # 生成二维码
-    img = qr.make_image()
-    # 保存二维码
-    img.save(QR_IMG_FILE)
+from jbot import BOT_SET, BOT_SET_JSON_FILE_USER, ch_name, chat_id, client, jdbot, QL_DATA_DIR, row
+from jbot.bot.utils import creat_qr, press_event, split_list
 
 
 def restart():
-    text = "pm2 restart jbot"
+    text = "ps -ef | grep 'python3 -m jbot' | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null; nohup python3 -m jbot >/ql/data/log/bot/nohup.log 2>&1 &"
     os.system(text)
 
 
@@ -57,7 +46,8 @@ def state():
 
 def delete():
     close()
-    os.remove(f'{CONFIG_DIR}/user.session')
+    os.remove(f'{QL_DATA_DIR}/db/user.session')
+    os.remove(f'{QL_DATA_DIR}/db/bot.session')
     restart()
 
 
@@ -172,11 +162,14 @@ async def user_login(event):
         elif qrlogin:
             await client.connect()
             qr_login = await client.qr_login()
-            creat_qr(qr_login.url)
+            QR_IMG_FILE = creat_qr(qr_login.url)
             await jdbot.send_message(chat_id, '请使用TG扫描二维码以开启USER', file=QR_IMG_FILE)
             await qr_login.wait(timeout=120)
             await jdbot.send_message(chat_id, '恭喜您已登录成功！\n自动重启中！')
-            os.remove(QR_IMG_FILE)
+            try:
+                os.remove(QR_IMG_FILE)
+            except:
+                pass
             start()
     except asyncio.exceptions.TimeoutError:
         await jdbot.edit_message(msg, '登录已超时，对话已停止')

@@ -1,15 +1,20 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import traceback
 
 from telethon import events
-from .. import jdbot, START_CMD, chat_id, logger, BOT_SET, ch_name
-from .utils import execute
 
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger, START_CMD
+from jbot.bot.utils import execute
 
 
 @jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern='/cmd'))
 async def my_cmd(event):
-    """接收/cmd命令后执行程序"""
+    """
+    接收/cmd命令后执行程序
+    """
     logger.info(f'即将执行{event.raw_text}命令')
     msg_text = event.raw_text.split(' ')
     try:
@@ -20,7 +25,6 @@ async def my_cmd(event):
         if START_CMD and text:
             info = f'执行 {text} 命令'
             await execute(chat_id, info, text)
-            logger.info(text)
         elif START_CMD:
             msg = '请正确使用/cmd命令，如：\n/cmd date  # 系统时间\n不建议直接使用cmd命令执行脚本，请使用/node或/snode'
             await jdbot.send_message(chat_id, msg)

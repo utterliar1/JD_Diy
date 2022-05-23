@@ -1,36 +1,57 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
+import re
 import traceback
+from uuid import uuid4
 
 from telethon import events
 
-from .beandata import get_bean_data
-from .. import BOT_SET, ch_name, chat_id, jdbot, LOG_DIR, logger
-from ..bot.quickchart import QuickChart
-from ..bot.utils import get_cks
-
-BEAN_IMG = f'{LOG_DIR}/bot/bean.jpeg'
+from jbot import bot_id, BOT_SET, ch_name, chat_id, client, jdbot, LOG_DIR, logger
+from jbot.bot.quickchart import QuickChart
+from jbot.user.beandata import get_bean_data
 
 
-@jdbot.on(events.NewMessage(chats=chat_id, pattern=r'^/chart'))
+@client.on(events.NewMessage(from_users=chat_id, pattern=r'^/chart|^-c\s?\d*$'))
 async def my_chart(event):
-    msg_text = event.raw_text.split(' ')
-    msg = await jdbot.send_message(chat_id, '正在查询，请稍后')
+    message = event.raw_text
+    if "-c" in message:
+        if re.search(f'\d', message):
+            num = re.findall("\d+", message)[0]
+            message = f'/chart {num}'
+        else:
+            message = '/chart 1'
+    msg_text = message.split(' ')
+    if event.chat_id == bot_id:
+        client_type = jdbot
+        channel = chat_id
+        msg = await jdbot.send_message(chat_id, '正在查询，请稍后')
+    else:
+        client_type = client
+        channel = event.chat_id
+        msg = await event.edit('正在查询，请稍后')
     try:
         if isinstance(msg_text, list) and len(msg_text) == 2:
             text = msg_text[-1]
         else:
             text = None
-        if text:
-            cookies = await get_cks()
-            res = get_bean_data(int(text), cookies)
+        if text and int(text):
+            res = await get_bean_data(int(text))
             if res['code'] != 200:
-                await msg.edit(f'错误：\n{str(res["data"])}')
-            else:
-                creat_chart(res['data'][3], f'账号{str(text)}', res['data'][0], res['data'][1], res['data'][2][1:])
                 await msg.delete()
-                await jdbot.send_message(chat_id, f'您的账号{text}收支情况', file=BEAN_IMG)
+                await client_type.send_message(channel, f'{str(res["data"])}')
+            else:
+                BEAN_IMG = creat_chart(res['data'][3], f'账号{str(text)}', res['data'][0], res['data'][1], res['data'][2][1:])
+                await msg.delete()
+                await client_type.send_message(channel, f'您的账号{text}收支情况', file=BEAN_IMG)
+                try:
+                    os.remove(BEAN_IMG)
+                except OSError:
+                    pass
         else:
-            await jdbot.edit_message(msg, '请正确使用命令\n/chart n n为第n个账号')
+            await msg.delete()
+            await client_type.send_message(channel, '请正确使用命令\n/chart n n为第n个账号')
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]
@@ -145,8 +166,10 @@ def creat_chart(xdata, title, bardata, bardata2, linedate):
             }
         }
     }
+    BEAN_IMG = f'{LOG_DIR}/bot/chart-{uuid4()}.jpg'
     qc.to_file(BEAN_IMG)
+    return BEAN_IMG
 
 
 if ch_name:
-    jdbot.add_event_handler(my_chart, events.NewMessage(chats=chat_id, pattern=BOT_SET['命令别名']['chart']))
+    client.add_event_handler(my_chart, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['chart']))

@@ -1,10 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import random
 import traceback
 
 from telethon import events
 
-from .. import BOT_SET, ch_name, chat_id, jdbot, logger
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger
 
 
 @jdbot.on(events.NewMessage())
@@ -57,6 +60,8 @@ if ch_name:
 @jdbot.on(events.NewMessage(incoming=True, chats=chat_id))
 async def resp(event):
     try:
+        if event.sender_id == chat_id:
+            return
         if event.reply_to:
             reply = await event.get_reply_message()
             if reply.fwd_from.from_id:

@@ -11,9 +11,10 @@ module.exports = {
             "jbot/*.log",
             "jbot/*/*.log",
             "jbot/__pycache__/*",
-            "jbot/user/__pycache__/*",
             "jbot/bot/__pycache__/*",
             "jbot/diy/__pycache__/*",
+            "jbot/user/__pycache__/*",
+            "jbot/maid/__pycache__/*",
             "jbot/requirements.txt",
             "jbot/ecosystem.config.js"
         ],

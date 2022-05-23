@@ -1,10 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import traceback
 
 from telethon import events
 
-from .utils import execute, snode_btn
-from .. import BOT_SET, ch_name, chat_id, JD_DIR, jdbot, logger
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger, QL_DATA_DIR
+from jbot.bot.utils import execute, snode_btn
 
 
 @jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/snode'))
@@ -12,7 +15,7 @@ async def my_snode(event):
     """定义supernode文件命令"""
     try:
         SENDER = event.sender_id
-        path = JD_DIR
+        path = QL_DATA_DIR
         page = 0
         filelist = None
         async with jdbot.conversation(SENDER, timeout=60) as conv:
@@ -20,7 +23,7 @@ async def my_snode(event):
             while path:
                 path, msg, page, filelist = await snode_btn(conv, SENDER, path, msg, page, filelist)
         if filelist and filelist.startswith('CMD-->'):
-            await execute(chat_id, '', filelist.replace('CMD-->', ''))
+            await execute(msg, msg.text, filelist.replace('CMD-->', ''))
     except Exception as e:
         title = "【💥错误💥】"
         name = "文件名：" + os.path.split(__file__)[-1].split(".")[0]

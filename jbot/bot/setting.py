@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import json
 import os
 import traceback
@@ -5,8 +8,8 @@ from asyncio import exceptions
 
 from telethon import Button, events
 
-from .utils import logger, press_event, split_list
-from .. import BOT_SET, BOT_SET_JSON_FILE_USER, ch_name, chat_id, jdbot
+from jbot import BOT_SET, BOT_SET_JSON_FILE_USER, ch_name, chat_id, jdbot
+from jbot.bot.utils import logger, press_event, split_list
 
 
 @jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern='^/set$'))
@@ -26,7 +29,7 @@ async def bot_set(event):
         btn = [Button.inline(i, i) for i in myset if not isinstance(myset[i], dict)]
         btn.append(Button.inline('取消', data='cancel'))
         btn = split_list(btn, 3)
-        async with jdbot.conversation(SENDER, timeout=90) as conv:
+        async with jdbot.conversation(SENDER, timeout=180) as conv:
             msg = await jdbot.edit_message(msg, info, buttons=btn, link_preview=False)
             convdata = await conv.wait_event(press_event(SENDER))
             res = bytes.decode(convdata.data)

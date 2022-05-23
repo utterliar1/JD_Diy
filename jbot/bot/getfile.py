@@ -1,106 +1,81 @@
-import asyncio
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import traceback
+from asyncio import exceptions
 
 from telethon import Button, events
 
-from .utils import add_cron, backup_file, DIY_DIR, execute, press_event, row, split_list, TASK_CMD, V4
-from .. import chat_id, CONFIG_DIR, jdbot, logger, SCRIPTS_DIR
+from jbot import chat_id, CONFIG_DIR, jdbot, logger, QL_DATA_DIR, SCRIPTS_DIR, TASK_CMD
+from jbot.bot.utils import add_cron, backup_file, execute, press_event, save_file
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id))
 async def bot_get_file(event):
-    """
-    定义文件操作
-    """
+    """定义文件操作"""
     try:
-        if not event.message.file:
-            return
-        filename = event.message.file.name
-        if not (
-                filename.endswith(".py")
-                or filename.endswith(".pyc")
-                or filename.endswith(".js")
-                or filename.endswith(".sh")
-        ):
-            return
+        btn = [[Button.inline('放入scripts', data=SCRIPTS_DIR),
+                Button.inline('放入scripts并运行', data='task')],
+               [Button.inline('放入config', data=CONFIG_DIR),
+                Button.inline('放入其他位置', data='other')],
+               [Button.inline('取消', data='cancel')]]
         SENDER = event.sender_id
-        cmdtext = False
-        if V4:
-            buttons = [
-                Button.inline('放入config', data=CONFIG_DIR),
-                Button.inline('仅放入scripts', data=SCRIPTS_DIR),
-                Button.inline('仅放入own文件夹', data=DIY_DIR),
-                Button.inline('放入scripts并运行', data='node1'),
-                Button.inline('放入own并运行', data='node'),
-                Button.inline('取消', data='cancel')
-            ]
-        else:
-            buttons = [
-                Button.inline('放入config', data=CONFIG_DIR),
-                Button.inline('仅放入scripts', data=SCRIPTS_DIR),
-                Button.inline('放入scripts并运行', data='node1'),
-                Button.inline('取消', data='cancel')
-            ]
-        async with jdbot.conversation(SENDER, timeout=180) as conversation:
-            msg = await conversation.send_message("请选择您要放入的文件夹或操作：\n", buttons=split_list(buttons, row))
-            byte = await conversation.wait_event(press_event(SENDER))
-            res1 = bytes.decode(byte.data)
-            if res1 == "cancel":
-                await jdbot.edit_message(msg, "对话已取消")
-                conversation.cancel()
-                return
-            await jdbot.delete_messages(chat_id, msg)
-            buttons = [Button.inline('是', data='yes'), Button.inline('否', data='no')]
-            msg = await conversation.send_message("是否尝试自动加入定时", buttons=buttons)
-            byte = await conversation.wait_event(press_event(SENDER))
-            res2 = bytes.decode(byte.data)
-            if res2 == "cancel":
-                await jdbot.edit_message(msg, "对话已取消")
-                conversation.cancel()
-                return
-            if res1 == "node":
-                backup_file(f'{DIY_DIR}/{filename}')
-                await jdbot.download_media(event.message, DIY_DIR)
-                cmdtext = f'{TASK_CMD} {DIY_DIR}/{filename} now'
-                if res2 == 'yes':
-                    try:
-                        with open(f'{DIY_DIR}/{filename}', 'r', encoding='utf-8') as f:
-                            resp = f.read()
-                    except:
-                        resp = "None"
-                    await add_cron(jdbot, conversation, resp, filename, msg, SENDER, buttons, DIY_DIR)
+        if event.message.file:
+            filename = event.message.file.name
+            cmdtext = None
+            async with jdbot.conversation(SENDER, timeout=180) as conv:
+                msg = await conv.send_message('请选择您要放入的文件夹或操作：', buttons=btn)
+                convdata = await conv.wait_event(press_event(SENDER))
+                res = bytes.decode(convdata.data)
+                markup = [Button.inline('是', data='yes'),
+                          Button.inline('否', data='no')]
+                if res == 'cancel':
+                    msg = await jdbot.edit_message(msg, '对话已取消')
+                    conv.cancel()
+                elif res == 'other':
+                    path = QL_DATA_DIR
+                    page = 0
+                    filelist = None
+                    while path:
+                        path, msg, page, filelist = await save_file(conv, SENDER, path, msg, page, filelist)
+                        if isinstance(filelist, str):
+                            backup_file(os.path.join(filelist, filename))
+                            await jdbot.download_media(event.message, filelist)
+                            await jdbot.edit_message(msg, f"{filename}\n已保存到 **{filelist}** 文件夹")
                 else:
-                    await jdbot.edit_message(msg, '脚本已保存到DIY文件夹，并成功运行')
-            elif res1 == "node1":
-                backup_file(f'{SCRIPTS_DIR}/{filename}')
-                await jdbot.download_media(event.message, SCRIPTS_DIR)
-                cmdtext = f'{TASK_CMD} {SCRIPTS_DIR}/{filename} now'
-                if res2 == 'yes':
-                    try:
-                        with open(f'{SCRIPTS_DIR}/{filename}', 'r', encoding='utf-8') as f:
-                            resp = f.read()
-                    except:
-                        resp = "None"
-                    await add_cron(jdbot, conversation, resp, filename, msg, SENDER, buttons, SCRIPTS_DIR)
-                else:
-                    await jdbot.edit_message(msg, '脚本已保存到SCRIPTS文件夹，并成功运行')
-            else:
-                backup_file(f'{res1}/{filename}')
-                await jdbot.download_media(event.message, res1)
-                if res2 == 'yes':
-                    try:
-                        with open(f'{res1}/{filename}', 'r', encoding='utf-8') as f:
-                            resp = f.read()
-                    except:
-                        resp = "None"
-                    await add_cron(jdbot, conversation, resp, filename, msg, SENDER, buttons, res1)
-                else:
-                    await jdbot.edit_message(msg, f'{filename}已保存到{res1}文件夹')
-            conversation.cancel()
-        if cmdtext:
-            await execute(chat_id, None, cmdtext)
-    except asyncio.TimeoutError:
+                    msg = await jdbot.edit_message(msg, '是否尝试自动加入定时', buttons=markup)
+                    convdata2 = await conv.wait_event(press_event(SENDER))
+                    res2 = bytes.decode(convdata2.data)
+                    if res == 'task':
+                        backup_file(os.path.join(SCRIPTS_DIR, filename))
+                        await jdbot.download_media(event.message, SCRIPTS_DIR)
+                        try:
+                            with open(os.path.join(SCRIPTS_DIR, filename), 'r', encoding='utf-8') as f:
+                                resp = f.read()
+                        except:
+                            resp = 'None'
+                        cmdtext = f'{TASK_CMD} {filename} now'
+                        if res2 == 'yes':
+                            msg = await add_cron(conv, resp, filename, msg, SENDER, markup, SCRIPTS_DIR)
+                        else:
+                            msg = await jdbot.edit_message(msg, f'{filename}\n已保存到 **SCRIPTS** 文件夹，并成功运行')
+                        conv.cancel()
+                    else:
+                        backup_file(os.path.join(res, filename))
+                        await jdbot.download_media(event.message, res)
+                        try:
+                            with open(os.path.join(res, filename), 'r', encoding='utf-8') as f:
+                                resp = f.read()
+                        except:
+                            resp = 'None'
+                        if res2 == 'yes':
+                            msg = await add_cron(conv, resp, filename, msg, SENDER, markup, res)
+                        else:
+                            msg = await jdbot.edit_message(msg, f'{filename}\n已保存到 **{res}** 文件夹')
+            if cmdtext:
+                await execute(msg, msg.text, cmdtext)
+    except exceptions.TimeoutError:
         await jdbot.edit_message(msg, '选择已超时，对话已停止')
     except Exception as e:
         title = "【💥错误💥】"

@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import os
 import traceback
 
 from telethon import events
 
-from .. import BOT_SET, ch_name, chat_id, jdbot, logger
+from jbot import BOT_SET, ch_name, chat_id, jdbot, logger
 
 
-@jdbot.on(events.NewMessage(from_users=chat_id, pattern=r'^/restart$'))
+@jdbot.on(events.NewMessage(chats=chat_id, from_users=chat_id, pattern=r'^/restart$'))
 async def myrestart(event):
     try:
-        cmdtext = "if [ -d '/jd' ]; then cd /jd/jbot; pm2 start ecosystem.config.js; cd /jd; pm2 restart jbot; else " \
-                  "ps -ef | grep 'python3 -m jbot' | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null; " \
-                  "nohup python3 -m jbot >/ql/log/bot/bot.log 2>&1 & fi "
         await jdbot.send_message(chat_id, "重启程序")
+        cmdtext = "ps -ef | grep 'python3 -m jbot' | grep -v grep | awk '{print $1}' | xargs kill -9 2>/dev/null; nohup python3 -m jbot >/ql/data/log/bot/nohup.log 2>&1 &"
         os.system(cmdtext)
     except Exception as e:
         title = "【💥错误💥】"
@@ -29,4 +26,4 @@ async def myrestart(event):
 
 
 if ch_name:
-    jdbot.add_event_handler(myrestart, events.NewMessage(from_users=chat_id, pattern=BOT_SET['命令别名']['restart']))
+    jdbot.add_event_handler(myrestart, events.NewMessage(chats=chat_id, from_users=chat_id, pattern=BOT_SET['命令别名']['restart']))

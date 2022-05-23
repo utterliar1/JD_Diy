@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import datetime
 import os
 import re
@@ -10,11 +9,10 @@ import traceback
 
 from telethon import events
 
-from .. import bot_id, chat_id, client, JD_DIR, jdbot, logger
-from ..diy.utils import my_chat_id
+from jbot import bot_id, chat_id, client, jdbot, logger, my_chat_id, QL_DATA_DIR
 
 
-@client.on(events.NewMessage(chats=[-1001159808620, my_chat_id], pattern=r".*京豆雨.*"))
+@client.on(events.NewMessage(chats=[-1001159808620, -1001588025107, my_chat_id], pattern=r".*京豆雨.*|红包雨.*"))
 async def red(event):
     """
     龙王庙京豆雨
@@ -22,10 +20,10 @@ async def red(event):
     """
     try:
         file = "jredrain.sh"
-        if not os.path.exists(f'{JD_DIR}/{file}'):
-            cmdtext = f'cd {JD_DIR} && wget https://raw.githubusercontent.com/chiupam/JD_Diy/master/other/{file}'
+        if not os.path.exists(f'{QL_DATA_DIR}/{file}'):
+            cmdtext = f'cd {QL_DATA_DIR} && wget https://raw.githubusercontent.com/chiupam/JD_Diy/master/other/{file}'
             os.system(cmdtext)
-            if not os.path.exists(f'{JD_DIR}/{file}'):
+            if not os.path.exists(f'{QL_DATA_DIR}/{file}'):
                 await jdbot.send_message(chat_id, f"【龙王庙】\n\n监控到RRA，但是缺少{file}文件，无法执行定时")
                 return
         message = event.message.text
@@ -33,7 +31,7 @@ async def red(event):
         Times = re.findall(r'开始时间.*', message)
         for RRA in RRAs:
             i = RRAs.index(RRA)
-            cmdtext = f"/cmd bash {JD_DIR}/{file} {RRA}"
+            cmdtext = f"/cmd bash {QL_DATA_DIR}/{file} {RRA}"
             Time_1 = Times[i].split(" ")[0].split("-")
             Time_2 = Times[i].split(" ")[1].split(":")
             Time_3 = time.localtime()
