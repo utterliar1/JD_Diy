@@ -3,7 +3,7 @@
 if [ ! -d "/ql" ];then
   root=/jd
 else
-  root=/ql
+  root=/ql/data
 fi
 
 dir_jbot=$root/jbot
